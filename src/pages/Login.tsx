@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 
 export function Login() {
-  const navigate = useNavigate();
   const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -18,8 +16,10 @@ export function Login() {
     setError(null);
     setBusy(true);
     try {
+      // login() stores the token and calls revalidate(); the root loader
+      // re-runs, LoginGuard sees authenticated=true and redirects to
+      // /providers automatically — no manual navigate needed.
       await login(username, password);
-      navigate("/providers");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed");
     } finally {

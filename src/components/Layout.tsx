@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "./Button";
 
@@ -10,14 +10,15 @@ const NAV = [
 
 export function Layout() {
   const { username, logout, authenticated } = useAuth();
-  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
   async function handleLogout() {
     setBusy(true);
     try {
       await logout();
-      navigate("/login");
+      // Hard refresh so the root loader re-runs from a clean state; avoids
+      // any race between the in-flight revalidate and the route guards.
+      window.location.assign("/login");
     } finally {
       setBusy(false);
     }

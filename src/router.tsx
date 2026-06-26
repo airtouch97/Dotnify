@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter, useRouteLoaderData } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import type { MeResponse } from "@/lib/types";
+import { ROOT_LOADER_ID } from "@/lib/constants";
 import { Layout } from "@/components/Layout";
 import { Setup } from "@/pages/Setup";
 import { Login } from "@/pages/Login";
@@ -9,15 +10,15 @@ import { Zones } from "@/pages/Zones";
 import { Records } from "@/pages/Records";
 import { Spinner } from "@/components/Spinner";
 
-export const ROOT_LOADER_ID = "root";
-
 /**
- * Root loader: determine setup/login state once at the very start so guards
- * can synchronously redirect before rendering anything.
+ * Root loader: determine setup/login state. Re-runs whenever a consumer calls
+ * useRevalidator().revalidate() (e.g. after login / logout).
  */
 export async function rootLoader() {
   try {
-    const me = await apiFetch<MeResponse>("/api/auth/me", { noAuth: true, allow401: true });
+    // Don't force noAuth: if a token exists in localStorage, send it so the
+    // me endpoint can report authenticated=true right after login.
+    const me = await apiFetch<MeResponse>("/api/auth/me", { allow401: true });
     return { me };
   } catch {
     return { me: { setupRequired: false, authenticated: false, username: null } as MeResponse };

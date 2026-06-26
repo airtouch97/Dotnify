@@ -1,51 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useRevalidator, useRouteLoaderData } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { clearToken, getToken, setToken } from "@/lib/token";
 import type { MeResponse } from "@/lib/types";
+import { ROOT_LOADER_ID } from "@/lib/constants";
 
-interface AuthState {
-  loading: boolean;
-  setupRequired: boolean;
-  authenticated: boolean;
-  username: string | null;
-}
-
-const INITIAL: AuthState = {
-  loading: true,
-  setupRequired: false,
-  authenticated: false,
-  username: null,
-};
-
+/**
+ * Auth state is derived from the root route loader (single source of truth).
+ * login / logout mutate the token then call `revalidate()` so the loader
+ * re-runs and every consumer (guards, Layout, pages) stays in sync.
+ */
 export function useAuth() {
-  const [state, setState] = useState<AuthState>(INITIAL);
+  const data = useRouteLoaderData(ROOT_LOADER_ID) as { me: MeResponse } | undefined;
+  const revalidator = useRevalidator();
+  const me = data?.me;
 
   const refresh = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true }));
-    try {
-      const me = await apiFetch<MeResponse>("/api/auth/me", { noAuth: true, allow401: true });
-      setState({
-        loading: false,
-        setupRequired: me.setupRequired,
-        authenticated: me.authenticated,
-        username: me.username,
-      });
-      return me;
-    } catch {
-      setState({ loading: false, setupRequired: false, authenticated: false, username: null });
-      return null;
-    }
-  }, []);
+    revalidator.revalidate();
+  }, [revalidator]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const { token, username: confirmed } = await apiFetch<{
-      token: string;
-      username: string;
-    }>("/api/auth/login", { method: "POST", noAuth: true, body: { username, password } });
-    setToken(token);
-    setState({ loading: false, setupRequired: false, authenticated: true, username: confirmed });
-    return confirmed;
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const { token, username: confirmed } = await apiFetch<{
+        token: string;
+        username: string;
+      }>("/api/auth/login", {
+        method: "POST",
+        noAuth: true,
+        body: { username, password },
+      });
+      setToken(token);
+      // Re-run the root loader so /api/auth/me reflects the new session.
+      revalidator.revalidate();
+      return confirmed;
+    },
+    [revalidator]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -54,12 +44,17 @@ export function useAuth() {
       // ignore network errors on logout
     }
     clearToken();
-    setState({ loading: false, setupRequired: false, authenticated: false, username: null });
-  }, []);
+    revalidator.revalidate();
+  }, [revalidator]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return { ...state, token: getToken(), refresh, login, logout };
+  return {
+    loading: !me,
+    setupRequired: me?.setupRequired ?? false,
+    authenticated: me?.authenticated ?? false,
+    username: me?.username ?? null,
+    token: getToken(),
+    refresh,
+    login,
+    logout,
+  };
 }

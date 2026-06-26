@@ -12,6 +12,23 @@ const scrypt = promisify(scryptCb) as (
 const SCRYPT_KEYLEN = 64;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
+/**
+ * Upstash SDK auto-deserializes JSON-looking strings into objects by default,
+ * so redis.get may return either the raw JSON string or an already-parsed
+ * object. Normalize both into a typed value.
+ */
+function parseStored<T>(raw: unknown): T | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+  return raw as T;
+}
+
 /** Hash a password with a fresh salt, returning `scrypt:<salt_hex>:<hash_hex>`. */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
@@ -43,13 +60,8 @@ export async function createSession(username: string): Promise<string> {
 
 /** Look up a session by token. Returns null if missing/expired. */
 export async function getSession(token: string): Promise<Session | null> {
-  const raw = await redis.get<string>(KEYS.session(token));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Session;
-  } catch {
-    return null;
-  }
+  const raw = await redis.get<unknown>(KEYS.session(token));
+  return parseStored<Session>(raw);
 }
 
 /** Delete a session token (logout). */
@@ -59,13 +71,8 @@ export async function destroySession(token: string): Promise<void> {
 
 /** Get the admin record, or null if not yet set up. */
 export async function getAdmin(): Promise<Admin | null> {
-  const raw = await redis.get<string>(KEYS.admin);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Admin;
-  } catch {
-    return null;
-  }
+  const raw = await redis.get<unknown>(KEYS.admin);
+  return parseStored<Admin>(raw);
 }
 
 /** Persist the admin record (only used by /api/auth/setup). */

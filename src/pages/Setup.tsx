@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import type { SetupResponse } from "@/lib/types";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 
 export function Setup() {
-  const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -32,7 +32,9 @@ export function Setup() {
         noAuth: true,
         body: { username, password },
       });
-      navigate("/login");
+      // Re-run the root loader; SetupGuard will see setupRequired=false and
+      // redirect to / (then IndexRedirect -> /login) automatically.
+      await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Setup failed");
     } finally {
