@@ -242,7 +242,7 @@ export async function listZones(ak: string, sk: string, region?: string): Promis
   return (resp.zones ?? []).map((z) => ({
     id: z.id ?? "",
     name: (z.name ?? "").replace(/\.$/, ""),
-    status: z.status ?? "",
+    status: (z.status ?? "").toLowerCase(),
   }));
 }
 
