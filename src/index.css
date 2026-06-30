@@ -11,3 +11,25 @@ body,
 body {
   @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
 }
+
+/* Custom scrollbar for Select dropdowns */
+.select-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.select-dropdown::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 3px;
+}
+.dark .select-dropdown {
+  scrollbar-color: #475569 transparent;
+}
+.dark .select-dropdown::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}

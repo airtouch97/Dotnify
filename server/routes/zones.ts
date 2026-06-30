@@ -201,11 +201,13 @@ zones.post("/:zoneId/records", async (c) => {
 
   try {
     if (provider.type === "cloudflare") {
+      // Cloudflare requires TTL=1 (auto) for proxied records
+      const isProxied = body.proxied === true;
       const payload: Record<string, unknown> = {
         type: body.type,
         name: body.name,
         content: body.content,
-        ttl: body.ttl ?? 1, // 1 = auto
+        ttl: isProxied ? 1 : (body.ttl ?? 1),
       };
       if (body.proxied !== undefined) payload.proxied = body.proxied;
       if (body.priority !== undefined) payload.priority = body.priority;
@@ -261,11 +263,17 @@ zones.patch("/:zoneId/records/:recordId", async (c) => {
 
   try {
     if (provider.type === "cloudflare") {
+      const isProxied = body.proxied === true;
       const payload: Record<string, unknown> = {};
       if (body.type !== undefined) payload.type = body.type;
       if (body.name !== undefined) payload.name = body.name;
       if (body.content !== undefined) payload.content = body.content;
-      if (body.ttl !== undefined) payload.ttl = body.ttl;
+      // Cloudflare requires TTL=1 (auto) for proxied records
+      if (isProxied) {
+        payload.ttl = 1;
+      } else if (body.ttl !== undefined) {
+        payload.ttl = body.ttl;
+      }
       if (body.proxied !== undefined) payload.proxied = body.proxied;
       if (body.priority !== undefined) payload.priority = body.priority;
 

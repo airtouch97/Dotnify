@@ -8,6 +8,7 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Toggle } from "@/components/Toggle";
+import { Select } from "@/components/Select";
 import { SkeletonRow } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import hwLineData from "@/huawei_line.json";
@@ -123,6 +124,30 @@ function resolveLineToLevels(lineId: string): [string, string, string, string] {
 
   // Fallback
   return ["default", "", "", ""];
+}
+
+const CF_TTL_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "__auto__" },
+  { value: 60, label: "1 min" },
+  { value: 120, label: "2 min" },
+  { value: 300, label: "5 min" },
+  { value: 600, label: "10 min" },
+  { value: 900, label: "15 min" },
+  { value: 1800, label: "30 min" },
+  { value: 3600, label: "1 hour" },
+  { value: 7200, label: "2 hours" },
+  { value: 18000, label: "5 hours" },
+  { value: 43200, label: "12 hours" },
+  { value: 86400, label: "1 day" },
+];
+
+function cfTtlLabel(opt: { value: number; label: string }, autoLabel: string): string {
+  return opt.label === "__auto__" ? autoLabel : opt.label;
+}
+
+function formatCfTtl(seconds: number, autoLabel: string): string {
+  const opt = CF_TTL_OPTIONS.find((o) => o.value === seconds);
+  return opt ? cfTtlLabel(opt, autoLabel) : `${seconds}s`;
 }
 
 export function Records() {
@@ -298,7 +323,7 @@ export function Records() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
-                      {showProxied && r.ttl === 1 ? t("records.auto") : r.ttl}
+                      {showProxied ? formatCfTtl(r.ttl, t("records.auto")) : r.ttl}
                     </td>
                     {showLine && (
                       <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
@@ -401,8 +426,14 @@ function RecordForm({
   const [type, setType] = useState<RecordType>(record?.type ?? "A");
   const [name, setName] = useState(record?.name ?? "");
   const [content, setContent] = useState(record?.content ?? "");
-  const [ttl, setTtl] = useState<number>(record?.ttl ?? (showProxied ? 1 : 300));
+  const [ttl, setTtl] = useState<number>(record?.ttl ?? 1);
   const [proxied, setProxied] = useState<boolean>(record?.proxied ?? false);
+
+  // When proxied changes, force TTL to 1 (auto)
+  function handleProxiedChange(val: boolean) {
+    setProxied(val);
+    if (val) setTtl(1);
+  }
   const [priority, setPriority] = useState<string>(
     record?.priority !== undefined && record?.priority !== null
       ? String(record.priority)
@@ -447,20 +478,12 @@ function RecordForm({
   return (
     <Card title={isEdit ? t("records.editRecord") : t("records.createRecord")}>
       <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("records.type")}</label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value as RecordType)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-          >
-            {RECORD_TYPES.map((rt) => (
-              <option key={rt} value={rt}>
-                {rt}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          label={t("records.type")}
+          options={RECORD_TYPES.map((rt) => ({ value: rt, label: rt }))}
+          value={type}
+          onChange={(v) => setType(v as RecordType)}
+        />
         <Input
           label={t("records.name")}
           value={name}
@@ -484,84 +507,81 @@ function RecordForm({
             hint={t("records.priorityHint")}
           />
         )}
-        <Input
-          label={t("records.ttlSeconds")}
-          type="number"
-          value={ttl}
-          onChange={(e) => setTtl(Number(e.target.value))}
-          hint={showProxied ? t("records.ttlAutoHint") : undefined}
-        />
+        {showProxied ? (
+          <Select
+            label={t("records.ttl")}
+            options={CF_TTL_OPTIONS.map((opt) => ({ value: opt.value, label: cfTtlLabel(opt, t("records.auto")) }))}
+            value={ttl}
+            onChange={(v) => setTtl(Number(v))}
+            disabled={proxied}
+          />
+        ) : (
+          <Input
+            label={t("records.ttlSeconds")}
+            type="number"
+            value={ttl}
+            onChange={(e) => setTtl(Number(e.target.value))}
+          />
+        )}
         {showLine && (
           <div className="flex flex-col gap-1 md:col-span-2">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("records.line")}</label>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {/* Level 1: Category */}
-              <select
+              <Select
+                options={[
+                  { value: "default", label: t("records.default") },
+                  { value: "carrier", label: t("records.carrier") },
+                  { value: "region", label: t("records.region") },
+                ]}
                 value={lineCategory}
-                onChange={(e) => {
-                  setLineCategory(e.target.value);
+                onChange={(v) => {
+                  setLineCategory(String(v));
                   setLineL2("");
                   setLineL3("");
                   setLineL4("");
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                <option value="default">{t("records.default")}</option>
-                <option value="carrier">{t("records.carrier")}</option>
-                <option value="region">{t("records.region")}</option>
-              </select>
+              />
 
               {/* Level 2: Group */}
-              <select
+              <Select
+                options={[
+                  { value: "", label: lineCategory === "default" ? t("records.default") : t("records.selectDot") },
+                  ...l2Options.map((id) => ({ value: id, label: HW_DATA[id].name })),
+                ]}
                 value={lineL2}
-                onChange={(e) => {
-                  setLineL2(e.target.value);
+                onChange={(v) => {
+                  setLineL2(String(v));
                   setLineL3("");
                   setLineL4("");
                 }}
                 disabled={lineCategory === "default"}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
-              >
-                <option value="">
-                  {lineCategory === "default" ? t("records.default") : t("records.selectDot")}
-                </option>
-                {l2Options.map((id) => (
-                  <option key={id} value={id}>{HW_DATA[id].name}</option>
-                ))}
-              </select>
+              />
 
               {/* Level 3: Sub-group */}
-              <select
+              <Select
+                options={[
+                  { value: "", label: lineCategory === "default" || l3Options.length === 0 ? t("records.default") : t("records.selectDot") },
+                  ...l3Options.map((id) => ({ value: id, label: stripPrefix(HW_DATA[id].name) })),
+                ]}
                 value={lineL3}
-                onChange={(e) => {
-                  setLineL3(e.target.value);
+                onChange={(v) => {
+                  setLineL3(String(v));
                   setLineL4("");
                 }}
                 disabled={lineCategory === "default" || l3Options.length === 0}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
-              >
-                <option value="">
-                  {lineCategory === "default" ? t("records.default") : l3Options.length === 0 ? t("records.default") : t("records.selectDot")}
-                </option>
-                {l3Options.map((id) => (
-                  <option key={id} value={id}>{stripPrefix(HW_DATA[id].name)}</option>
-                ))}
-              </select>
+              />
 
               {/* Level 4: Leaf (carrier only) */}
-              <select
+              <Select
+                options={[
+                  { value: "", label: lineCategory !== "carrier" || l4Options.length === 0 ? t("records.default") : t("records.selectDot") },
+                  ...l4Options.map((id) => ({ value: id, label: stripPrefix(HW_DATA[id].name) })),
+                ]}
                 value={lineL4}
-                onChange={(e) => setLineL4(e.target.value)}
+                onChange={(v) => setLineL4(String(v))}
                 disabled={lineCategory !== "carrier" || l4Options.length === 0}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
-              >
-                <option value="">
-                  {lineCategory !== "carrier" ? t("records.default") : l4Options.length === 0 ? t("records.default") : t("records.selectDot")}
-                </option>
-                {l4Options.map((id) => (
-                  <option key={id} value={id}>{stripPrefix(HW_DATA[id].name)}</option>
-                ))}
-              </select>
+              />
             </div>
           </div>
         )}
@@ -569,7 +589,7 @@ function RecordForm({
           <div className="self-end pb-2">
             <Toggle
               checked={proxied}
-              onChange={setProxied}
+              onChange={handleProxiedChange}
               label={t("records.proxied")}
               hint={t("records.proxiedHint")}
             />
