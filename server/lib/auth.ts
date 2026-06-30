@@ -80,10 +80,9 @@ export async function setAdmin(admin: Admin): Promise<void> {
   await redis.set(KEYS.admin, JSON.stringify(admin));
 }
 
-/** Extract a bearer token from the Authorization header. */
-export function extractBearerToken(headers: Record<string, string | string[] | undefined>): string | null {
-  const auth = headers.authorization ?? headers.Authorization;
-  if (!auth || typeof auth !== "string") return null;
-  const m = auth.match(/^Bearer\s+(.+)$/i);
+/** Extract a bearer token from the Authorization header string. */
+export function extractBearerToken(authorization: string | undefined): string | null {
+  if (!authorization) return null;
+  const m = authorization.match(/^Bearer\s+(.+)$/i);
   return m ? m[1].trim() : null;
 }

@@ -4,9 +4,8 @@ import path from "node:path";
 import { devApi } from "./scripts/vite-plugin-dev-api";
 
 export default defineConfig(({ mode }) => {
-  // Load .env / .env.local / .env.[mode] and inject non-VITE_ vars into
-  // process.env so the API functions (loaded via ssrLoadModule) can see
-  // UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN.
+  // Load .env / .env.local and inject non-VITE_ vars into process.env
+  // so the server code (loaded via ssrLoadModule) can see them.
   const env = loadEnv(mode, process.cwd(), "");
   for (const [k, v] of Object.entries(env)) {
     if (!(k in process.env)) process.env[k] = v;
@@ -20,7 +19,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5173,
+      port: 3000,
     },
   };
 });

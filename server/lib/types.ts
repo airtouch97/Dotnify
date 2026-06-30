@@ -1,19 +1,7 @@
-/** Minimal HTTP types so we don't need to depend on `@vercel/node` types. */
-
-export interface ApiRequest {
-  method?: string;
-  query?: Record<string, string | string[] | undefined>;
-  body?: unknown;
-  headers?: Record<string, string | string[] | undefined>;
+export interface AuthedVariables {
+  session: Session;
+  token: string;
 }
-
-export interface ApiResponse {
-  status(code: number): ApiResponse;
-  json(body: unknown): ApiResponse;
-  end(): void;
-}
-
-export type ApiHandler = (req: ApiRequest, res: ApiResponse) => void | Promise<void>;
 
 export interface Admin {
   username: string;
@@ -45,7 +33,6 @@ export interface Zone {
   id: string;
   name: string;
   status: string;
-  // Cloudflare returns more fields; we only expose what the UI needs.
 }
 
 export type RecordType =

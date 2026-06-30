@@ -9,9 +9,6 @@ dist-ssr/
 build/
 *.tsbuildinfo
 
-# Vercel
-.vercel/
-
 # Environment variables (contains secrets like UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN)
 .env
 .env.local
@@ -28,6 +25,9 @@ lerna-debug.log*
 logs/
 *.log
 
+# Claude Code
+.claude/
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json
@@ -39,4 +39,3 @@ Thumbs.db
 
 # Test coverage
 coverage/
-.vercel

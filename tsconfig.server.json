@@ -13,5 +13,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node"]
   },
-  "include": ["api/**/*.ts"]
+  "include": ["server/**/*.ts"]
 }
