@@ -9,6 +9,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Spinner } from "@/components/Spinner";
 import { EmptyState } from "@/components/EmptyState";
+import { ProviderLogo } from "@/components/ProviderLogo";
 
 const HW_REGIONS = [
   { value: "cn-north-1", label: "North Beijing-1" },
@@ -354,9 +355,7 @@ function ProviderRow({ provider, onChanged }: { provider: Provider; onChanged: (
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                {provider.type}
-              </span>
+              <ProviderLogo type={provider.type} />
               <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{provider.name}</h3>
             </div>
             <dl className="mt-1 flex flex-wrap gap-x-6 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">

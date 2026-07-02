@@ -1,20 +1,39 @@
 import type { ProviderType } from "@/lib/types";
+import { CloudflareLogo, HuaweiCloudLogo, DnspodLogo } from "@/lib/provider-logos";
 
-const LOGOS: Record<ProviderType, { bg: string; text: string; label: string }> = {
-  cloudflare: { bg: "bg-orange-500", text: "CF", label: "Cloudflare" },
-  huawei: { bg: "bg-red-600", text: "HW", label: "Huawei Cloud" },
-  dnspod: { bg: "bg-blue-500", text: "TX", label: "DNSPod" },
+const LABELS: Record<ProviderType, string> = {
+  cloudflare: "Cloudflare",
+  huawei: "Huawei Cloud",
+  dnspod: "DNSPod",
 };
 
 export function ProviderLogo({ type, size = "sm" }: { type: ProviderType; size?: "sm" | "md" }) {
-  const logo = LOGOS[type] ?? { bg: "bg-slate-400", text: "?", label: type };
-  const dim = size === "md" ? "h-7 w-7 text-[10px]" : "h-5 w-5 text-[8px]";
+  const label = LABELS[type] ?? type;
+  const dim = size === "md" ? "h-7 w-7" : "h-5 w-5";
+
+  const svg = (() => {
+    switch (type) {
+      case "cloudflare": return <CloudflareLogo />;
+      case "huawei": return <HuaweiCloudLogo />;
+      case "dnspod": return <DnspodLogo />;
+      default: return null;
+    }
+  })();
+
+  if (svg) {
+    return (
+      <span title={label} className={`inline-flex ${dim} items-center`}>
+        {svg}
+      </span>
+    );
+  }
+
   return (
     <span
-      title={logo.label}
-      className={`inline-flex ${dim} items-center justify-center rounded font-bold uppercase text-white ${logo.bg}`}
+      title={label}
+      className={`inline-flex ${dim} items-center justify-center rounded font-bold uppercase text-white bg-slate-400`}
     >
-      {logo.text}
+      ?
     </span>
   );
 }
