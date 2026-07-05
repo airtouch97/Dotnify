@@ -16,8 +16,8 @@ app.use("/*", async (c, next) => {
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 });
 
-// Limit request body size to 1 MB for API routes
-app.use("/api/*", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({ ok: false, error: "Request body too large" }, 413) }));
+// Limit request body size to 2 MB for API routes (import can be large)
+app.use("/api/*", bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ ok: false, error: "Request body too large" }, 413) }));
 
 // Global error handler
 app.onError((err, c) => {
