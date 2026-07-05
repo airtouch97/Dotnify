@@ -248,7 +248,7 @@ export function Records() {
             {t("records.dnsRecords")}
           </h1>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-            {t("records.zone")} <span className="font-mono text-slate-700 dark:text-slate-300">{zoneId}</span>
+            {t("records.zone")} <span className="font-mono text-slate-700 dark:text-slate-300">{zoneName || zoneId}</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
