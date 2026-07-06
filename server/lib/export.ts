@@ -37,13 +37,14 @@ export function toZoneFile(records: DnsRecord[], zoneName: string): string {
       const pri = r.priority ?? 10;
       lines.push(`${name}\t${ttl}\t${cls}\tMX\t${pri} ${r.content}.`);
     } else if (r.type === "SRV") {
-      const pri = r.priority ?? 0;
-      // SRV content format: priority weight port target
+      // SRV content in dotnify: "priority weight port target"
+      // Zone file SRV rdata is the same format, just ensure target has trailing dot
       const parts = r.content.split(/\s+/);
       if (parts.length >= 4) {
-        lines.push(`${name}\t${ttl}\t${cls}\tSRV\t${pri} ${parts[1]} ${parts[2]} ${parts[3]}.`);
+        const target = parts[3].endsWith(".") ? parts[3] : `${parts[3]}.`;
+        lines.push(`${name}\t${ttl}\t${cls}\tSRV\t${parts[0]} ${parts[1]} ${parts[2]} ${target}`);
       } else {
-        lines.push(`${name}\t${ttl}\t${cls}\tSRV\t${pri} ${r.content}`);
+        lines.push(`${name}\t${ttl}\t${cls}\tSRV\t${r.content}`);
       }
     } else if (r.type === "TXT") {
       // Ensure TXT values are quoted

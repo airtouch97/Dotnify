@@ -502,12 +502,7 @@ zones.get("/:zoneId/export", async (c) => {
   let records: DnsRecord[] = [];
   try {
     if (provider.type === "cloudflare") {
-      const result = await cfFetch<CfRecord[]>(
-        provider.apiKey,
-        `/zones/${zoneId}/dns_records`,
-        { query: { per_page: 5000 } }
-      );
-      records = (Array.isArray(result) ? result : []).map(normalizeCf);
+      records = await fetchAllCfRecords(provider.apiKey, zoneId);
     } else if (provider.type === "huawei") {
       const recordSets = await listRecordSets(
         provider.apiAccessKey ?? "",
@@ -588,12 +583,7 @@ zones.post("/:zoneId/import", async (c) => {
   let existing: DnsRecord[] = [];
   try {
     if (provider.type === "cloudflare") {
-      const cfResult = await cfFetch<CfRecord[]>(
-        provider.apiKey,
-        `/zones/${zoneId}/dns_records`,
-        { query: { per_page: 5000 } }
-      );
-      existing = (Array.isArray(cfResult) ? cfResult : []).map(normalizeCf);
+      existing = await fetchAllCfRecords(provider.apiKey, zoneId);
     } else if (provider.type === "huawei") {
       const recordSets = await listRecordSets(
         provider.apiAccessKey ?? "",
@@ -685,6 +675,29 @@ function normalizeRecordName(name: string, zoneName: string): string {
   const suffix = `.${zoneName}`;
   if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
   return n;
+}
+
+/**
+ * Fetch ALL Cloudflare DNS records for a zone, handling pagination.
+ * CF API limits per_page to 100, so we paginate through all pages.
+ */
+async function fetchAllCfRecords(apiKey: string, zoneId: string): Promise<DnsRecord[]> {
+  const all: DnsRecord[] = [];
+  let page = 1;
+  const perPage = 100;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const result = await cfFetch<CfRecord[]>(
+      apiKey,
+      `/zones/${zoneId}/dns_records`,
+      { query: { per_page: perPage, page } }
+    );
+    const batch = (Array.isArray(result) ? result : []).map(normalizeCf);
+    all.push(...batch);
+    if (batch.length < perPage) break; // last page
+    page++;
+  }
+  return all;
 }
 
 /** Create a single DNS record (reuses provider dispatch logic). */

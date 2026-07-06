@@ -95,6 +95,7 @@ export function fromZoneFile(content: string, zoneName: string): ImportResult {
   const errors: string[] = [];
   const records: ImportRecord[] = [];
   let origin = zoneName;
+  let lastName = zoneName; // for blank-name inheritance
 
   // Join continuation lines (parenthesized multi-line records)
   const joined = content.replace(/\([^)]*\)/g, (m) => m.replace(/\n/g, " "));
@@ -118,12 +119,13 @@ export function fromZoneFile(content: string, zoneName: string): ImportResult {
 
     let idx = 0;
 
-    // Name field — may be blank (inherits previous)
+    // Name field — may be blank (inherits previous record's name)
     let name = tokens[idx];
     if (!isClass(name) && !isType(name)) {
       idx++;
+      lastName = name;
     } else {
-      name = zoneName; // blank name field
+      name = lastName; // blank name field — inherit from previous
     }
 
     // Optional TTL (must be a number)
@@ -259,13 +261,16 @@ function parseRdata(type: RecordType, rdata: string, _origin: string): { content
   }
 
   if (type === "SRV") {
-    // SRV: priority weight port target — content includes weight+port+target
+    // Zone file SRV rdata: "priority weight port target"
+    // dotnify stores the same format in content
     const match = rdata.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/);
     if (match) {
       const priority = parseInt(match[1], 10);
+      const weight = match[2];
+      const port = match[3];
       let target = match[4].trim();
       if (target.endsWith(".")) target = target.slice(0, -1);
-      return { content: `${priority} ${match[2]} ${match[3]} ${target}`, priority };
+      return { content: `${priority} ${weight} ${port} ${target}`, priority };
     }
     return { content: rdata.trim() };
   }
