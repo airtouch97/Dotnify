@@ -96,6 +96,7 @@ export function fromZoneFile(content: string, zoneName: string): ImportResult {
   const records: ImportRecord[] = [];
   let origin = zoneName;
   let lastName = zoneName; // for blank-name inheritance
+  let defaultTtl = 300; // $TTL default
 
   // Join continuation lines (parenthesized multi-line records)
   const joined = content.replace(/\([^)]*\)/g, (m) => m.replace(/\n/g, " "));
@@ -109,7 +110,12 @@ export function fromZoneFile(content: string, zoneName: string): ImportResult {
       origin = line.slice(8).trim().replace(/\.$/, "");
       continue;
     }
-    if (line.startsWith("$TTL") || line.startsWith("$INCLUDE") || line.startsWith("$GENERATE")) {
+    if (line.startsWith("$TTL")) {
+      const val = parseInt(line.slice(5).trim(), 10);
+      if (!isNaN(val) && val > 0) defaultTtl = val;
+      continue;
+    }
+    if (line.startsWith("$INCLUDE") || line.startsWith("$GENERATE")) {
       continue; // skip unsupported directives
     }
 
@@ -128,8 +134,8 @@ export function fromZoneFile(content: string, zoneName: string): ImportResult {
       name = lastName; // blank name field — inherit from previous
     }
 
-    // Optional TTL (must be a number)
-    let ttl = 300;
+    // Optional TTL (must be a number); fall back to $TTL default
+    let ttl = defaultTtl;
     if (idx < tokens.length && /^\d+$/.test(tokens[idx])) {
       ttl = parseInt(tokens[idx], 10);
       idx++;
