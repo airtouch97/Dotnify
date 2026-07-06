@@ -23,6 +23,9 @@ import {
 import type { DpRecord } from "../lib/dnspod.js";
 import type { Provider, Zone, DnsRecord } from "../lib/types.js";
 import type { AuthedVariables } from "../lib/types.js";
+import { toJson, toZoneFile, toCsv } from "../lib/export.js";
+import { fromJson, fromZoneFile, fromCsv } from "../lib/import.js";
+import type { ImportRecord } from "../lib/import.js";
 
 type Variables = AuthedVariables;
 
@@ -482,5 +485,355 @@ zones.delete("/:zoneId/records/:recordId", async (c) => {
     return error(c, "Failed to delete record", 502);
   }
 });
+
+/**
+ * GET /api/zones/:zoneId/export?providerId=...&zoneName=...&format=json|zonefile|csv
+ * Export all DNS records in the specified format.
+ */
+zones.get("/:zoneId/export", async (c) => {
+  const zoneId = c.req.param("zoneId");
+  const zoneName = c.req.query("zoneName") ?? "";
+  const format = c.req.query("format") ?? "json";
+  const provider = await findProvider(c.req.query("providerId"));
+  if (!provider) return notFound(c, "Provider not found");
+  if (!zoneId) return error(c, "zoneId is required");
+
+  // Fetch records (reuse existing logic)
+  let records: DnsRecord[] = [];
+  try {
+    if (provider.type === "cloudflare") {
+      records = await fetchAllCfRecords(provider.apiKey, zoneId);
+    } else if (provider.type === "huawei") {
+      const recordSets = await listRecordSets(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        provider.region,
+        zoneId
+      );
+      records = recordSets.map((rs) => normalizeHw(rs, zoneName));
+    } else if (provider.type === "dnspod") {
+      const dpRecords = await dpListRecords(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      records = dpRecords.map(normalizeDp);
+    } else {
+      return error(c, `Unsupported provider type: ${provider.type}`, 400);
+    }
+  } catch {
+    return error(c, "Failed to fetch records for export", 502);
+  }
+
+  // Convert format
+  const safeName = zoneName.replace(/[^a-zA-Z0-9.-]/g, "_");
+  let body: string;
+  let contentType: string;
+  let extension: string;
+
+  if (format === "zonefile") {
+    body = toZoneFile(records, zoneName);
+    contentType = "text/plain";
+    extension = "txt";
+  } else if (format === "csv") {
+    body = toCsv(records, zoneName);
+    contentType = "text/csv";
+    extension = "csv";
+  } else {
+    body = toJson(records, zoneName);
+    contentType = "application/json";
+    extension = "json";
+  }
+
+  return c.body(body, 200, {
+    "Content-Type": contentType,
+    "Content-Disposition": `attachment; filename="${safeName}.${extension}"`,
+  });
+});
+
+/**
+ * POST /api/zones/:zoneId/import?providerId=...&zoneName=...
+ * Body: { format: "json"|"zonefile"|"csv", content: string, strategy: "skip"|"overwrite"|"append" }
+ */
+zones.post("/:zoneId/import", async (c) => {
+  const zoneId = c.req.param("zoneId");
+  const zoneName = c.req.query("zoneName") ?? "";
+  const provider = await findProvider(c.req.query("providerId"));
+  if (!provider) return notFound(c, "Provider not found");
+  if (!zoneId) return error(c, "zoneId is required");
+
+  const body = await c.req.json<{ format?: string; content?: string; strategy?: string }>();
+  const format = body.format ?? "json";
+  const content = body.content ?? "";
+  const strategy = body.strategy ?? "append";
+
+  if (!content) return error(c, "content is required");
+
+  // Parse records from the given format
+  const result =
+    format === "zonefile" ? fromZoneFile(content, zoneName) :
+    format === "csv" ? fromCsv(content, zoneName) :
+    fromJson(content, zoneName);
+
+  if (result.records.length === 0 && result.errors.length > 0) {
+    return error(c, `Parse failed: ${result.errors.join("; ")}`, 400);
+  }
+
+  // Fetch existing records for conflict detection
+  let existing: DnsRecord[] = [];
+  try {
+    if (provider.type === "cloudflare") {
+      existing = await fetchAllCfRecords(provider.apiKey, zoneId);
+    } else if (provider.type === "huawei") {
+      const recordSets = await listRecordSets(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        provider.region,
+        zoneId
+      );
+      existing = recordSets.map((rs) => normalizeHw(rs, zoneName));
+    } else if (provider.type === "dnspod") {
+      const dpRecords = await dpListRecords(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      existing = dpRecords.map(normalizeDp);
+    }
+  } catch {
+    // If we can't fetch existing records, fall back to append-only
+  }
+
+  // Build a set of existing (name, type, content) tuples for conflict detection.
+  // Using content in addition to name+type avoids false matches when multiple
+  // records of the same type exist (e.g. multiple TXT or A records).
+  // Normalize names the same way the import parsers do (strip zone suffix, @ for apex).
+  const existingKeys = new Set(
+    existing.map((r) => `${normalizeRecordName(r.name, zoneName)}:${r.type}:${r.content}`)
+  );
+  // Also track name+type only, for types that should be unique (CNAME)
+  const existingNameTypeKeys = new Set(
+    existing.map((r) => `${normalizeRecordName(r.name, zoneName)}:${r.type}`)
+  );
+
+  let created = 0;
+  let skipped = 0;
+  let updated = 0;
+  const importErrors: string[] = [...result.errors];
+
+  for (const rec of result.records) {
+    const nameTypeKey = `${rec.name}:${rec.type}`;
+    const fullKey = `${rec.name}:${rec.type}:${rec.content}`;
+    // A record "exists" if the exact same name+type+content is present,
+    // OR if it's a CNAME (which must be unique per name)
+    const isCname = rec.type === "CNAME";
+    const exists = existingKeys.has(fullKey) || (isCname && existingNameTypeKeys.has(nameTypeKey));
+
+    if (exists && strategy === "skip") {
+      skipped++;
+      continue;
+    }
+
+    if (strategy === "overwrite" && existingNameTypeKeys.has(nameTypeKey)) {
+      // Find the existing record ID (match by normalized name + type + content for exact match,
+      // or by name + type for CNAME which must be unique)
+      const match = isCname
+        ? existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type)
+        : existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type && r.content === rec.content);
+      if (match) {
+        try {
+          await updateExistingRecord(provider, zoneId, zoneName, match.id, rec);
+          updated++;
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : "";
+          importErrors.push(`Failed to update ${rec.name} (${rec.type}): ${detail}`);
+        }
+        continue;
+      }
+    }
+
+    // append or overwrite-with-no-match: create new
+    try {
+      await createNewRecord(provider, zoneId, zoneName, rec);
+      created++;
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "";
+      importErrors.push(`Failed to create ${rec.name} (${rec.type}): ${detail}`);
+    }
+  }
+
+  return ok(c, { created, skipped, updated, errors: importErrors });
+});
+/**
+ * Normalize a record name for comparison purposes.
+ * Strips the zone suffix and converts apex names to "@",
+ * matching the same logic used by the import parsers.
+ */
+function normalizeRecordName(name: string, zoneName: string): string {
+  let n = name.trim();
+  if (n.endsWith(".")) n = n.slice(0, -1);
+  if (n === "@") return "@";
+  if (n === zoneName) return "@";
+  const suffix = `.${zoneName}`;
+  if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+  return n;
+}
+
+/**
+ * Fetch ALL Cloudflare DNS records for a zone, handling pagination.
+ * CF API limits per_page to 100, so we paginate through all pages.
+ */
+async function fetchAllCfRecords(apiKey: string, zoneId: string): Promise<DnsRecord[]> {
+  const all: DnsRecord[] = [];
+  let page = 1;
+  const perPage = 100;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const result = await cfFetch<CfRecord[]>(
+      apiKey,
+      `/zones/${zoneId}/dns_records`,
+      { query: { per_page: perPage, page } }
+    );
+    const batch = (Array.isArray(result) ? result : []).map(normalizeCf);
+    all.push(...batch);
+    if (batch.length < perPage) break; // last page
+    page++;
+  }
+  return all;
+}
+
+/** Create a single DNS record (reuses provider dispatch logic). */
+async function createNewRecord(
+  provider: Provider,
+  zoneId: string,
+  zoneName: string,
+  rec: ImportRecord,
+): Promise<void> {
+  if (provider.type === "cloudflare") {
+    const isProxied = rec.proxied === true;
+    const payload: Record<string, unknown> = {
+      type: rec.type,
+      name: rec.name,
+      content: rec.content,
+      ttl: isProxied ? 1 : (rec.ttl ?? 1),
+    };
+    if (rec.proxied !== undefined) payload.proxied = rec.proxied;
+    if (rec.priority !== undefined) payload.priority = rec.priority;
+
+    await cfFetch<CfRecord>(provider.apiKey, `/zones/${zoneId}/dns_records`, {
+      method: "POST",
+      body: payload,
+    });
+  } else if (provider.type === "huawei") {
+    const records = rec.content.includes(", ")
+      ? rec.content.split(", ")
+      : [rec.content];
+    await hwCreateRecordSet(
+      provider.apiAccessKey ?? "",
+      provider.apiSecretKey ?? "",
+      provider.region,
+      zoneId,
+      zoneName,
+      {
+        name: rec.name,
+        type: rec.type,
+        ttl: rec.ttl ?? 300,
+        records,
+        line: rec.line,
+      }
+    );
+  } else if (provider.type === "dnspod") {
+    const ak = provider.apiAccessKey ?? "";
+    const sk = provider.apiSecretKey ?? "";
+    const lineName = await resolveDpLineName(ak, sk, zoneName, rec.line);
+    const dpTtl = Math.max(rec.ttl || 600, 600);
+    await dpCreateRecord(ak, sk, zoneName, {
+      name: rec.name,
+      type: rec.type,
+      content: rec.content,
+      line: rec.line,
+      lineName,
+      ttl: dpTtl,
+      mx: rec.priority,
+      weight: rec.weight,
+    });
+  } else {
+    throw new Error(`Unsupported provider type: ${provider.type}`);
+  }
+}
+
+/** Update an existing DNS record. */
+async function updateExistingRecord(
+  provider: Provider,
+  zoneId: string,
+  zoneName: string,
+  recordId: string,
+  rec: ImportRecord,
+): Promise<void> {
+  if (provider.type === "cloudflare") {
+    const isProxied = rec.proxied === true;
+    const payload: Record<string, unknown> = {
+      type: rec.type,
+      name: rec.name,
+      content: rec.content,
+    };
+    if (isProxied) {
+      payload.ttl = 1;
+    } else if (rec.ttl !== undefined) {
+      payload.ttl = rec.ttl;
+    }
+    if (rec.proxied !== undefined) payload.proxied = rec.proxied;
+    if (rec.priority !== undefined) payload.priority = rec.priority;
+
+    await cfFetch<CfRecord>(provider.apiKey, `/zones/${zoneId}/dns_records/${recordId}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  } else if (provider.type === "huawei") {
+    const ak = provider.apiAccessKey ?? "";
+    const sk = provider.apiSecretKey ?? "";
+    const reg = provider.region;
+
+    const existingSets = await listRecordSets(ak, sk, reg, zoneId);
+    const existing = existingSets.find((rs) => rs.id === recordId);
+    if (!existing) throw new Error("Record not found");
+
+    const records = rec.content.includes(", ")
+      ? rec.content.split(", ")
+      : [rec.content];
+
+    await hwUpdateRecordSet(ak, sk, reg, zoneId, recordId, zoneName, {
+      name: rec.name ?? existing.name,
+      type: rec.type ?? existing.type,
+      ttl: rec.ttl ?? existing.ttl,
+      records,
+      line: rec.line ?? existing.line,
+    });
+  } else if (provider.type === "dnspod") {
+    const ak = provider.apiAccessKey ?? "";
+    const sk = provider.apiSecretKey ?? "";
+
+    const existingRecords = await dpListRecords(ak, sk, zoneName);
+    const existing = existingRecords.find((r) => r.id === recordId);
+    if (!existing) throw new Error("Record not found");
+
+    const resolvedLine = rec.line ?? existing.line;
+    const lineName = await resolveDpLineName(ak, sk, zoneName, resolvedLine);
+    const dpTtl = Math.max(rec.ttl ?? (existing.ttl || 600), 600);
+
+    await dpUpdateRecord(ak, sk, zoneName, recordId, {
+      name: rec.name ?? existing.name,
+      type: rec.type ?? existing.type,
+      content: rec.content ?? existing.content,
+      line: resolvedLine,
+      lineName,
+      ttl: dpTtl,
+      mx: rec.priority ?? existing.mx,
+      weight: rec.weight ?? existing.weight,
+    });
+  } else {
+    throw new Error(`Unsupported provider type: ${provider.type}`);
+  }
+}
 
 export default zones;

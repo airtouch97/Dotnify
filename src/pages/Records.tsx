@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/token";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { DnsRecord, ProviderType, RecordType } from "@/lib/types";
@@ -225,6 +226,8 @@ export function Records() {
 
   const [editing, setEditing] = useState<DnsRecord | null>(null);
   const [creating, setCreating] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   if (!zoneId || !providerId) {
     return (
@@ -251,13 +254,19 @@ export function Records() {
             {t("records.zone")} <span className="font-mono text-slate-700 dark:text-slate-300">{zoneName || zoneId}</span>
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isValidating && !loading && (
             <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
               {t("records.updating")}
             </span>
           )}
+          <Button variant="ghost" onClick={() => setShowExport(true)}>
+            {t("records.export")}
+          </Button>
+          <Button variant="ghost" onClick={() => setShowImport(true)}>
+            {t("records.import")}
+          </Button>
           <Button
             onClick={() => {
               setEditing(null);
@@ -280,6 +289,25 @@ export function Records() {
             setCreating(false);
             void refetch();
           }}
+        />
+      )}
+
+      {showExport && (
+        <ExportModal
+          zoneId={zoneId}
+          zoneName={zoneName}
+          providerId={providerId}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          zoneId={zoneId}
+          zoneName={zoneName}
+          providerId={providerId}
+          onClose={() => setShowImport(false)}
+          onDone={() => void refetch()}
         />
       )}
 
@@ -833,6 +861,422 @@ function DnsLineSelector({
         disabled={childIds.length === 0}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export modal
+// ---------------------------------------------------------------------------
+
+function ExportModal({
+  zoneId,
+  zoneName,
+  providerId,
+  onClose,
+}: {
+  zoneId: string;
+  zoneName: string;
+  providerId: string;
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const [format, setFormat] = useState<"json" | "zonefile" | "csv">("json");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const FORMATS: { value: "json" | "zonefile" | "csv"; label: string; desc: string }[] = [
+    { value: "json", label: t("records.formatJson"), desc: t("records.formatJsonDesc") },
+    { value: "zonefile", label: t("records.formatZonefile"), desc: t("records.formatZonefileDesc") },
+    { value: "csv", label: t("records.formatCsv"), desc: t("records.formatCsvDesc") },
+  ];
+
+  async function handleExport() {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = getToken();
+      const query = `?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}&format=${format}`;
+      const res = await fetch(`/api/zones/${zoneId}/export${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(t("records.exportFailed"));
+
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="?(.+?)"?$/);
+      const filename = match?.[1] ?? `${zoneName}.${format === "zonefile" ? "txt" : format}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("records.exportFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title={t("records.export")}>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-2">
+          {FORMATS.map((f) => (
+            <label
+              key={f.value}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                format === f.value
+                  ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/20"
+                  : "border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500"
+              }`}
+            >
+              <input
+                type="radio"
+                name="export-format"
+                value={f.value}
+                checked={format === f.value}
+                onChange={() => setFormat(f.value)}
+                className="mt-0.5 accent-brand-600"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{f.label}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">{f.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>{t("records.cancel")}</Button>
+          <Button onClick={handleExport} loading={busy}>{t("records.export")}</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Import modal
+// ---------------------------------------------------------------------------
+
+interface PreviewRecord {
+  type: string;
+  name: string;
+  content: string;
+  ttl: number;
+}
+
+function ImportModal({
+  zoneId,
+  zoneName,
+  providerId,
+  onClose,
+  onDone,
+}: {
+  zoneId: string;
+  zoneName: string;
+  providerId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { t } = useLang();
+  const [format, setFormat] = useState<"json" | "zonefile" | "csv">("json");
+  const [content, setContent] = useState("");
+  const [strategy, setStrategy] = useState<"skip" | "overwrite" | "append">("skip");
+  const [preview, setPreview] = useState<PreviewRecord[]>([]);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number; updated: number; errors: string[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  // Parse content for preview when it changes
+  useEffect(() => {
+    if (!content) {
+      setPreview([]);
+      setParseErrors([]);
+      return;
+    }
+    // Client-side preview parse (simple, doesn't need to match server exactly)
+    try {
+      if (format === "json") {
+        const parsed = JSON.parse(content);
+        const arr = Array.isArray(parsed) ? parsed : parsed.records;
+        if (Array.isArray(arr)) {
+          const records = arr.slice(0, 20).map((r: Record<string, unknown>) => ({
+            type: String(r.type ?? ""),
+            name: String(r.name ?? ""),
+            content: String(r.content ?? ""),
+            ttl: typeof r.ttl === "number" ? r.ttl : 300,
+          }));
+          setPreview(records);
+          setParseErrors([]);
+        } else {
+          setPreview([]);
+          setParseErrors(["Invalid JSON structure"]);
+        }
+      } else if (format === "csv") {
+        const lines = content.split(/\r?\n/).filter((l) => l.trim());
+        if (lines.length > 1) {
+          const header = lines[0].toLowerCase().split(",");
+          const typeIdx = header.indexOf("type");
+          const nameIdx = header.indexOf("name");
+          const contentIdx = header.indexOf("content");
+          const ttlIdx = header.indexOf("ttl");
+          if (typeIdx < 0 || nameIdx < 0 || contentIdx < 0) {
+            setPreview([]);
+            setParseErrors(["CSV must have type, name, content columns"]);
+            return;
+          }
+          const records = lines.slice(1, 21).map((line) => {
+            const cols = line.split(",");
+            return {
+              type: (cols[typeIdx] ?? "").trim().toUpperCase(),
+              name: (cols[nameIdx] ?? "").trim(),
+              content: (cols[contentIdx] ?? "").trim(),
+              ttl: ttlIdx >= 0 ? parseInt(cols[ttlIdx], 10) || 300 : 300,
+            };
+          });
+          setPreview(records);
+          setParseErrors([]);
+        } else {
+          setPreview([]);
+          setParseErrors([]);
+        }
+      } else {
+        // Zone file — basic preview, just show non-comment lines
+        const lines = content.split("\n").filter((l) => l.trim() && !l.trim().startsWith(";") && !l.trim().startsWith("$"));
+        const records = lines.slice(0, 20).map((l) => {
+          const parts = l.trim().split(/\s+/);
+          return {
+            type: parts.length >= 4 ? parts[3] : "",
+            name: parts[0] || "",
+            content: parts.slice(4).join(" ") || "",
+            ttl: parts.length >= 2 ? parseInt(parts[1], 10) || 300 : 300,
+          };
+        });
+        setPreview(records);
+        setParseErrors([]);
+      }
+    } catch {
+      setPreview([]);
+      setParseErrors(["Parse error"]);
+    }
+  }, [content, format]);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+
+    // Auto-detect format from extension
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "csv") setFormat("csv");
+    else if (ext === "txt" || ext === "zone") setFormat("zonefile");
+    else setFormat("json");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setContent(reader.result as string);
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleImport() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ created: number; skipped: number; updated: number; errors: string[] }>(
+        `/api/zones/${zoneId}/import?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}`,
+        {
+          method: "POST",
+          body: { format, content, strategy },
+        },
+      );
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("records.importFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Show result after import
+  if (result) {
+    return (
+      <Card title={t("records.import")}>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            {t("records.importResult", { created: result.created, skipped: result.skipped, updated: result.updated })}
+          </p>
+          {result.errors.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-red-600">{t("records.importErrors")}:</p>
+              <ul className="mt-1 list-inside list-disc text-xs text-red-500">
+                {result.errors.slice(0, 10).map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                onDone();
+                onClose();
+              }}
+            >
+              {t("records.close")}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={t("records.import")}>
+      <div className="space-y-4">
+        {/* Format selector */}
+        <Select
+          label={t("records.importFormat")}
+          options={[
+            { value: "json", label: t("records.formatJson") },
+            { value: "zonefile", label: t("records.formatZonefile") },
+            { value: "csv", label: t("records.formatCsv") },
+          ]}
+          value={format}
+          onChange={(v) => setFormat(v as "json" | "zonefile" | "csv")}
+        />
+
+        {/* File upload / paste area */}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            {t("records.pasteOrUpload")}
+          </label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,.txt,.csv,.zone"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-brand-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" />
+            </svg>
+            {fileName ?? "Choose file…"}
+          </button>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={8}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
+            placeholder={format === "json" ? '[{ "type": "A", "name": "www", "content": "1.2.3.4", "ttl": 300 }]' : format === "csv" ? "type,name,content,ttl\nA,www,1.2.3.4,300" : "www  300  IN  A  1.2.3.4"}
+          />
+        </div>
+
+        {/* Parse errors */}
+        {parseErrors.length > 0 && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
+            <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
+              {t("records.parseErrors", { count: parseErrors.length })}
+            </p>
+            <ul className="mt-1 list-inside list-disc text-xs text-yellow-600 dark:text-yellow-500">
+              {parseErrors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* Preview */}
+        {preview.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              {t("records.importPreviewCount", { count: preview.length })}
+            </p>
+            <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                    <th className="px-2 py-1">Type</th>
+                    <th className="px-2 py-1">Name</th>
+                    <th className="px-2 py-1">Content</th>
+                    <th className="px-2 py-1">TTL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.map((r, i) => (
+                    <tr key={i} className="border-b border-slate-100 last:border-b-0 dark:border-slate-700">
+                      <td className="px-2 py-1 font-mono">{r.type}</td>
+                      <td className="px-2 py-1 font-mono">{r.name}</td>
+                      <td className="max-w-[200px] truncate px-2 py-1 font-mono">{r.content}</td>
+                      <td className="px-2 py-1">{r.ttl}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Conflict strategy */}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            {t("records.conflictStrategy")}
+          </label>
+          {([
+            { value: "skip", label: t("records.skip"), desc: t("records.skipDesc") },
+            { value: "overwrite", label: t("records.overwrite"), desc: t("records.overwriteDesc") },
+            { value: "append", label: t("records.append"), desc: t("records.appendDesc") },
+          ] as const).map((s) => (
+            <label
+              key={s.value}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                strategy === s.value
+                  ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/20"
+                  : "border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500"
+              }`}
+            >
+              <input
+                type="radio"
+                name="conflict-strategy"
+                value={s.value}
+                checked={strategy === s.value}
+                onChange={() => setStrategy(s.value)}
+                className="mt-0.5 accent-brand-600"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{s.label}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">{s.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {error && <p className="text-xs text-red-600">{error}</p>}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>{t("records.cancel")}</Button>
+          <Button
+            onClick={handleImport}
+            loading={busy}
+            disabled={!content.trim()}
+          >
+            {t("records.startImport")}
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
