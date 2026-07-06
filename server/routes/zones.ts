@@ -614,8 +614,17 @@ zones.post("/:zoneId/import", async (c) => {
     // If we can't fetch existing records, fall back to append-only
   }
 
-  // Build a set of existing (name, type) pairs for conflict detection
-  const existingKeys = new Set(existing.map((r) => `${r.name}:${r.type}`));
+  // Build a set of existing (name, type, content) tuples for conflict detection.
+  // Using content in addition to name+type avoids false matches when multiple
+  // records of the same type exist (e.g. multiple TXT or A records).
+  // Normalize names the same way the import parsers do (strip zone suffix, @ for apex).
+  const existingKeys = new Set(
+    existing.map((r) => `${normalizeRecordName(r.name, zoneName)}:${r.type}:${r.content}`)
+  );
+  // Also track name+type only, for types that should be unique (CNAME)
+  const existingNameTypeKeys = new Set(
+    existing.map((r) => `${normalizeRecordName(r.name, zoneName)}:${r.type}`)
+  );
 
   let created = 0;
   let skipped = 0;
@@ -623,17 +632,24 @@ zones.post("/:zoneId/import", async (c) => {
   const importErrors: string[] = [...result.errors];
 
   for (const rec of result.records) {
-    const key = `${rec.name}:${rec.type}`;
-    const exists = existingKeys.has(key);
+    const nameTypeKey = `${rec.name}:${rec.type}`;
+    const fullKey = `${rec.name}:${rec.type}:${rec.content}`;
+    // A record "exists" if the exact same name+type+content is present,
+    // OR if it's a CNAME (which must be unique per name)
+    const isCname = rec.type === "CNAME";
+    const exists = existingKeys.has(fullKey) || (isCname && existingNameTypeKeys.has(nameTypeKey));
 
     if (exists && strategy === "skip") {
       skipped++;
       continue;
     }
 
-    if (exists && strategy === "overwrite") {
-      // Find the existing record ID
-      const match = existing.find((r) => r.name === rec.name && r.type === rec.type);
+    if (strategy === "overwrite" && existingNameTypeKeys.has(nameTypeKey)) {
+      // Find the existing record ID (match by normalized name + type + content for exact match,
+      // or by name + type for CNAME which must be unique)
+      const match = isCname
+        ? existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type)
+        : existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type && r.content === rec.content);
       if (match) {
         try {
           await updateExistingRecord(provider, zoneId, zoneName, match.id, rec);
@@ -656,6 +672,20 @@ zones.post("/:zoneId/import", async (c) => {
 
   return ok(c, { created, skipped, updated, errors: importErrors });
 });
+/**
+ * Normalize a record name for comparison purposes.
+ * Strips the zone suffix and converts apex names to "@",
+ * matching the same logic used by the import parsers.
+ */
+function normalizeRecordName(name: string, zoneName: string): string {
+  let n = name.trim();
+  if (n.endsWith(".")) n = n.slice(0, -1);
+  if (n === "@") return "@";
+  if (n === zoneName) return "@";
+  const suffix = `.${zoneName}`;
+  if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+  return n;
+}
 
 /** Create a single DNS record (reuses provider dispatch logic). */
 async function createNewRecord(
