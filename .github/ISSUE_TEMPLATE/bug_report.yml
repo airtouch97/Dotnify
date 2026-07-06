@@ -47,6 +47,6 @@ body:
     attributes:
       label: Version
       description: Which version are you running?
-      placeholder: e.g. v0.1.0
+      placeholder: e.g. v0.2.0
     validations:
       required: true

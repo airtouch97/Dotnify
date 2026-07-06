@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.2.0 (2026-07-06)
+
+### Features
+
+- DNS record import and export
+- Sliding session expiration
+
+### Bug Fixes
+
+- Show zone name instead of ID on Records page
+
+### Documentation
+
+- Add acknowledgement to LINUX DO community
+
+### Infrastructure
+
+- Remove release branch workflow; sync from main instead
+
 ## v0.1.0 (2026-07-04)
 
 ### Features

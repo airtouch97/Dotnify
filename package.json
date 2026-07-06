@@ -1,6 +1,6 @@
 {
   "name": "dotnify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Aggregate and manage DNS resolution records across multiple domain registrars.",
