@@ -992,6 +992,7 @@ function ImportModal({
   const [result, setResult] = useState<{ created: number; skipped: number; updated: number; errors: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   // Parse content for preview when it changes
   useEffect(() => {
@@ -1070,6 +1071,8 @@ function ImportModal({
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setFileName(file.name);
 
     // Auto-detect format from extension
     const ext = file.name.split(".").pop()?.toLowerCase();
@@ -1161,8 +1164,18 @@ function ImportModal({
             type="file"
             accept=".json,.txt,.csv,.zone"
             onChange={handleFileUpload}
-            className="text-sm text-slate-600 dark:text-slate-300"
+            className="hidden"
           />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-brand-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" />
+            </svg>
+            {fileName ?? "Choose file…"}
+          </button>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
