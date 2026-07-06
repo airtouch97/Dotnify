@@ -10,7 +10,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: release
+          ref: main
 
       - name: Sync from Upstream
         run: |
@@ -20,7 +20,7 @@ jobs:
           git remote add upstream https://github.com/airtouch97/Dotnify.git 2>/dev/null || git remote set-url upstream https://github.com/airtouch97/Dotnify.git
           git fetch upstream
 
-          git checkout release
-          git merge upstream/release -m "Update to upstream release"
+          git checkout main
+          git merge upstream/main -m "Update to upstream main"
 
-          git push origin release
+          git push origin main
