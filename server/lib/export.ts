@@ -47,8 +47,12 @@ export function toZoneFile(records: DnsRecord[], zoneName: string): string {
         lines.push(`${name}\t${ttl}\t${cls}\tSRV\t${r.content}`);
       }
     } else if (r.type === "TXT") {
-      // Ensure TXT values are quoted
-      const val = r.content.startsWith('"') ? r.content : `"${r.content}"`;
+      // Ensure TXT values are quoted and internal quotes are escaped
+      let val = r.content;
+      // Escape any unescaped double quotes inside the value
+      val = val.replace(/(?<!\\)"/g, '\\"');
+      // Wrap in quotes
+      val = `"${val}"`;
       lines.push(`${name}\t${ttl}\t${cls}\tTXT\t${val}`);
     } else if (r.type === "CNAME" || r.type === "NS" || r.type === "PTR") {
       lines.push(`${name}\t${ttl}\t${cls}\t${r.type}\t${r.content}.`);

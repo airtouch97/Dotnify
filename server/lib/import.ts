@@ -172,7 +172,9 @@ export function fromCsv(content: string, zoneName: string): ImportResult {
   const errors: string[] = [];
   const records: ImportRecord[] = [];
 
-  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  // Strip UTF-8 BOM if present (common in Windows-exported CSV)
+  const cleaned = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  const lines = cleaned.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return { records: [], errors: ["Empty CSV"] };
 
   // Parse header

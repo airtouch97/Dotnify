@@ -644,8 +644,9 @@ zones.post("/:zoneId/import", async (c) => {
         try {
           await updateExistingRecord(provider, zoneId, zoneName, match.id, rec);
           updated++;
-        } catch {
-          importErrors.push(`Failed to update ${rec.name} (${rec.type})`);
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : "";
+          importErrors.push(`Failed to update ${rec.name} (${rec.type}): ${detail}`);
         }
         continue;
       }
@@ -655,8 +656,9 @@ zones.post("/:zoneId/import", async (c) => {
     try {
       await createNewRecord(provider, zoneId, zoneName, rec);
       created++;
-    } catch {
-      importErrors.push(`Failed to create ${rec.name} (${rec.type})`);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "";
+      importErrors.push(`Failed to create ${rec.name} (${rec.type}): ${detail}`);
     }
   }
 
