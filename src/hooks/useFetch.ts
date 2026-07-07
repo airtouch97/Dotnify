@@ -60,13 +60,14 @@ function lsDel(path: string): void {
  * - `cacheTtl`: if set (seconds), persists data to localStorage so the next
  *   session shows data instantly instead of a loading spinner.
  *
- * Pass `null` as `path` to skip fetching (e.g. until a param is known).
+ * Pass `null` or `""` as `path` to skip fetching (e.g. until a param is known).
  */
 export function useFetch<T>(path: string | null, opts: { cacheTtl?: number; deps?: unknown[] } = {}) {
   const { cacheTtl = 0, deps = [] } = opts;
+  const active = path && path.length > 0;
 
   const [state, setState] = useState<State<T>>(() => {
-    if (!path) return { data: null, loading: false, error: null, isValidating: false };
+    if (!active) return { data: null, loading: false, error: null, isValidating: false };
     // Check persistent cache first
     if (cacheTtl > 0) {
       const lsData = lsGet<T>(path, cacheTtl);
@@ -87,7 +88,7 @@ export function useFetch<T>(path: string | null, opts: { cacheTtl?: number; deps
 
   /** Fetch from network. If force=true, skip localStorage cache check. */
   async function doFetch(force: boolean) {
-    if (!path) {
+    if (!active) {
       setState({ data: null, loading: false, error: null, isValidating: false });
       return;
     }

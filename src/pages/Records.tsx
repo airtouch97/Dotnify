@@ -203,7 +203,7 @@ export function Records() {
   const dpLinesPath = providerType === "dnspod" && zoneId && providerId
     ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
     : null;
-  const { data: dpLinesData } = useFetch<{ lineId: string; name: string }[]>(dpLinesPath ?? "");
+  const { data: dpLinesData } = useFetch<{ lineId: string; name: string }[]>(dpLinesPath);
   const dpLineNameMap = useMemo(() => {
     if (!dpLinesData) return new Map<string, string>();
     return new Map(dpLinesData.map((l) => [l.lineId, l.name]));
@@ -466,7 +466,7 @@ function RecordForm({
   const dpLinesPath = providerType === "dnspod" && zoneId && providerId
     ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
     : null;
-  const { data: dpLinesData } = useFetch<{ lineId: string; name: string; parent: string | null }[]>(dpLinesPath ?? "");
+  const { data: dpLinesData } = useFetch<{ lineId: string; name: string; parent: string | null }[]>(dpLinesPath);
 
   // Build DNSPod line lookup maps
   const dpLineMap = useMemo(() => {
