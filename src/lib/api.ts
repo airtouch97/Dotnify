@@ -16,11 +16,16 @@ interface ApiOptions {
   noAuth?: boolean;
   /** Treat 401 as a non-throwing signal (caller handles). */
   allow401?: boolean;
+  /** Return the raw Response instead of parsing JSON. Useful for blob downloads. */
+  raw?: boolean;
 }
 
 export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const token = getToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
+  if (!opts.raw) {
+    headers["Content-Type"] = "application/json";
+  }
   if (!opts.noAuth && token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -30,6 +35,25 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
+
+  // Handle 401 uniformly
+  if (!res.ok && res.status === 401) {
+    clearToken();
+    if (!opts.allow401) {
+      if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/setup") {
+        window.location.assign("/login");
+      }
+    }
+  }
+
+  // Raw mode: return the Response directly (caller handles body reading)
+  if (opts.raw) {
+    if (!res.ok) {
+      const message = await res.text().catch(() => `Request failed (${res.status})`);
+      throw new ApiError(message, res.status);
+    }
+    return res as unknown as T;
+  }
 
   let payload: unknown = null;
   const text = await res.text();
@@ -42,17 +66,6 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   }
 
   if (!res.ok) {
-    if (res.status === 401) {
-      clearToken();
-      if (opts.allow401) {
-        // signal to caller
-      } else {
-        // bounce to /login if we're in the browser
-        if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/setup") {
-          window.location.assign("/login");
-        }
-      }
-    }
     const message =
       (payload && typeof payload === "object" && "error" in payload
         ? String((payload as { error: unknown }).error)

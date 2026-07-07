@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
-import { getToken } from "@/lib/token";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { DnsRecord, ProviderType, RecordType, ZoneWithProvider } from "@/lib/types";
@@ -900,12 +899,8 @@ function ExportModal({
     setBusy(true);
     setError(null);
     try {
-      const token = getToken();
       const query = `?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}&format=${format}`;
-      const res = await fetch(`/api/zones/${zoneId}/export${query}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(t("records.exportFailed"));
+      const res = await apiFetch<Response>(`/api/zones/${zoneId}/export${query}`, { raw: true });
 
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") ?? "";
