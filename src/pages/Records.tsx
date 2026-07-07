@@ -758,6 +758,8 @@ function RecordForm({
               onChange={(v) => { handleProxiedChange(v); trackDirty(); }}
               label={t("records.proxied")}
               hint={t("records.proxiedHint")}
+              onLabel={t("records.on")}
+              offLabel={t("records.off")}
             />
           </div>
         )}

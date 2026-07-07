@@ -3,10 +3,13 @@ interface ToggleProps {
   onChange: (checked: boolean) => void;
   label?: string;
   hint?: string;
+  /** Labels for the on/off state shown when both label and hint are present. Defaults to "On"/"Off". */
+  onLabel?: string;
+  offLabel?: string;
   disabled?: boolean;
 }
 
-export function Toggle({ checked, onChange, label, hint, disabled }: ToggleProps) {
+export function Toggle({ checked, onChange, label, hint, onLabel = "On", offLabel = "Off", disabled }: ToggleProps) {
   return (
     <div className="flex flex-col gap-1">
       {label && (
@@ -31,7 +34,7 @@ export function Toggle({ checked, onChange, label, hint, disabled }: ToggleProps
       {hint && !label && <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
       {hint && label && (
         <p className={`text-xs ${checked ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
-          {checked ? "On" : "Off"} — {hint}
+          {checked ? onLabel : offLabel} — {hint}
         </p>
       )}
     </div>
