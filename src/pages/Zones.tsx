@@ -246,7 +246,6 @@ function AddDomainForm({ managedZones, onSaved, onCancel }: { managedZones: Zone
                 >
                   <ProviderLogo type={p.type} />
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{p.name}</span>
-                  <ProviderLogo type={p.type} />
                   <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
                     {p.selectedZones.length === 0 ? t("zones.allZones") : t("zones.zoneCount", { count: p.selectedZones.length })}
                   </span>
