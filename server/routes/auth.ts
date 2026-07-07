@@ -45,7 +45,7 @@ const DUMMY_HASH = "scrypt:00000000000000000000000000000000:00000000000000000000
  * Body: { username, password }
  * Returns: { token, username }
  */
-auth.post("/login", rateLimit, async (c) => {
+auth.post("/login", rateLimit(), async (c) => {
   const body = await c.req.json<{ username?: string; password?: string }>();
   const username = body.username?.trim();
   const password = body.password ?? "";
@@ -91,7 +91,7 @@ auth.post("/logout", async (c) => {
  * First-time admin creation. Only available when no admin exists yet.
  * Body: { username, password }
  */
-auth.post("/setup", rateLimit, async (c) => {
+auth.post("/setup", rateLimit(), async (c) => {
   const body = await c.req.json<{ username?: string; password?: string }>();
   const username = body.username?.trim();
   const password = body.password ?? "";
