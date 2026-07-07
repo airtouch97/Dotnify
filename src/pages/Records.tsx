@@ -3,7 +3,12 @@ import { Link, useParams, useLocation } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
-import type { DnsRecord, ProviderType, RecordType, ZoneWithProvider } from "@/lib/types";
+import type {
+  DnsRecord,
+  ProviderType,
+  RecordType,
+  ZoneWithProvider,
+} from "@/lib/types";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
@@ -39,7 +44,8 @@ function validateContent(type: RecordType, content: string): string | null {
   if (!content) return null;
   if (type === "A" && !IPV4_RE.test(content)) return "records.invalidIpv4";
   if (type === "AAAA" && !IPV6_RE.test(content)) return "records.invalidIpv6";
-  if (type === "CNAME" && !DOMAIN_RE.test(content) && content !== "@") return "records.invalidCname";
+  if (type === "CNAME" && !DOMAIN_RE.test(content) && content !== "@")
+    return "records.invalidCname";
   return null;
 }
 
@@ -94,13 +100,20 @@ function stripPrefix(name: string): string {
 // ---------------------------------------------------------------------------
 
 // Category IDs: top-level roots that aren't default
-const CARRIER_IDS = ["Dianxin", "Yidong", "Liantong", "Jiaoyuwang", "Tietong", "Pengboshi"];
+const CARRIER_IDS = [
+  "Dianxin",
+  "Yidong",
+  "Liantong",
+  "Jiaoyuwang",
+  "Tietong",
+  "Pengboshi",
+];
 
 // For "地域解析" level 2, show CN + Abroad itself + Abroad's direct children + AQ (南极洲)
 const REGION_L2_IDS = [
   "CN",
   ...getChildren("Abroad"), // AP, OA, EU, NA, LA, AF
-  "AQ",     // 南极洲 (orphaned in data, parent=AQ)
+  "AQ", // 南极洲 (orphaned in data, parent=AQ)
   "Abroad", // 境外 (catch-all)
 ];
 
@@ -167,7 +180,10 @@ const CF_TTL_OPTIONS: { value: number; label: string }[] = [
   { value: 86400, label: "1 day" },
 ];
 
-function cfTtlLabel(opt: { value: number; label: string }, autoLabel: string): string {
+function cfTtlLabel(
+  opt: { value: number; label: string },
+  autoLabel: string,
+): string {
   return opt.label === "__auto__" ? autoLabel : opt.label;
 }
 
@@ -180,14 +196,23 @@ export function Records() {
   const { t, lang } = useLang();
   const { zoneId } = useParams<{ zoneId: string }>();
   const location = useLocation();
-  const state = location.state as { providerId?: string; providerType?: ProviderType; zoneName?: string } | null;
+  const state = location.state as {
+    providerId?: string;
+    providerType?: ProviderType;
+    zoneName?: string;
+  } | null;
 
   // Fallback: if state is missing (direct URL / refresh), fetch zone info from API
-  const { data: zonesData } = useFetch<{ zones: ZoneWithProvider[] }>(!state?.providerId && zoneId ? "/api/zones" : null, { cacheTtl: 604800 });
+  const { data: zonesData } = useFetch<{ zones: ZoneWithProvider[] }>(
+    !state?.providerId && zoneId ? "/api/zones" : null,
+    { cacheTtl: 604800 },
+  );
   const fallbackZone = zonesData?.zones.find((z) => z.id === zoneId);
 
   const providerId = state?.providerId ?? fallbackZone?.providerId ?? null;
-  const providerType = (state?.providerType ?? fallbackZone?.providerType ?? "cloudflare") as ProviderType;
+  const providerType = (state?.providerType ??
+    fallbackZone?.providerType ??
+    "cloudflare") as ProviderType;
   const zoneName = state?.zoneName ?? fallbackZone?.name ?? "";
   const showProxied = providerType === "cloudflare";
   const showLine = providerType === "huawei" || providerType === "dnspod";
@@ -199,10 +224,12 @@ export function Records() {
   }, [zoneName, t]);
 
   // DNSPod line data for display in the table
-  const dpLinesPath = providerType === "dnspod" && zoneId && providerId
-    ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
-    : null;
-  const { data: dpLinesData } = useFetch<{ lineId: string; name: string }[]>(dpLinesPath);
+  const dpLinesPath =
+    providerType === "dnspod" && zoneId && providerId
+      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
+      : null;
+  const { data: dpLinesData } =
+    useFetch<{ lineId: string; name: string }[]>(dpLinesPath);
   const dpLineNameMap = useMemo(() => {
     if (!dpLinesData) return new Map<string, string>();
     return new Map(dpLinesData.map((l) => [l.lineId, l.name]));
@@ -249,14 +276,20 @@ export function Records() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link to="/domains" className="text-sm text-brand-600 hover:underline">
+          <Link
+            to="/domains"
+            className="text-sm text-brand-600 hover:underline"
+          >
             {t("records.backToDomains")}
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
             {t("records.dnsRecords")}
           </h1>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-            {t("records.zone")} <span className="font-mono text-slate-700 dark:text-slate-300">{zoneName || zoneId}</span>
+            {t("records.zone")}{" "}
+            <span className="font-mono text-slate-700 dark:text-slate-300">
+              {zoneName || zoneId}
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -333,21 +366,42 @@ export function Records() {
       {loading ? (
         <Card className="overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                  <th className="px-4 py-2 font-medium">{t("records.type")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.name")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.content")}</th>
-                  <th className="px-4 py-2 font-medium w-24">{t("records.ttl")}</th>
-                  {showLine && <th className="px-4 py-2 font-medium">{t("records.line")}</th>}
-                  {showProxied && <th className="px-4 py-2 font-medium">{t("records.proxied")}</th>}
-                  <th className="px-4 py-2 text-right font-medium w-28">{t("records.actions")}</th>
+                  <th className="px-4 py-2 font-medium w-[7%]">
+                    {t("records.type")}
+                  </th>
+                  <th className="px-4 py-2 font-medium w-[20%]">
+                    {t("records.name")}
+                  </th>
+                  <th className="px-4 py-2 font-medium">
+                    {t("records.content")}
+                  </th>
+                  <th className="px-4 py-2 font-medium w-[9%]">
+                    {t("records.ttl")}
+                  </th>
+                  {showLine && (
+                    <th className="px-4 py-2 font-medium w-[16%]">
+                      {t("records.line")}
+                    </th>
+                  )}
+                  {showProxied && (
+                    <th className="px-4 py-2 font-medium w-[9%]">
+                      {t("records.proxied")}
+                    </th>
+                  )}
+                  <th className="px-4 py-2 text-right font-medium w-[11%]">
+                    {t("records.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <SkeletonRow key={i} cols={4 + (showLine ? 1 : 0) + (showProxied ? 1 : 0) + 1} />
+                  <SkeletonRow
+                    key={i}
+                    cols={4 + (showLine ? 1 : 0) + (showProxied ? 1 : 0) + 1}
+                  />
                 ))}
               </tbody>
             </table>
@@ -372,16 +426,34 @@ export function Records() {
       ) : (
         <Card className="overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                  <th className="px-4 py-2 font-medium">{t("records.type")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.name")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.content")}</th>
-                  <th className="px-4 py-2 font-medium w-24">{t("records.ttl")}</th>
-                  {showLine && <th className="px-4 py-2 font-medium">{t("records.line")}</th>}
-                  {showProxied && <th className="px-4 py-2 font-medium">{t("records.proxied")}</th>}
-                  <th className="px-4 py-2 text-right font-medium w-28">{t("records.actions")}</th>
+                  <th className="px-4 py-2 font-medium w-[7%]">
+                    {t("records.type")}
+                  </th>
+                  <th className="px-4 py-2 font-medium w-[20%]">
+                    {t("records.name")}
+                  </th>
+                  <th className="px-4 py-2 font-medium">
+                    {t("records.content")}
+                  </th>
+                  <th className="px-4 py-2 font-medium w-[9%]">
+                    {t("records.ttl")}
+                  </th>
+                  {showLine && (
+                    <th className="px-4 py-2 font-medium w-[16%]">
+                      {t("records.line")}
+                    </th>
+                  )}
+                  {showProxied && (
+                    <th className="px-4 py-2 font-medium w-[9%]">
+                      {t("records.proxied")}
+                    </th>
+                  )}
+                  <th className="px-4 py-2 text-right font-medium w-[11%]">
+                    {t("records.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -395,10 +467,16 @@ export function Records() {
                         {r.type}
                       </span>
                     </td>
-                    <td className="px-4 py-2 font-mono text-slate-900 dark:text-slate-100">
+                    <td
+                      className="px-4 py-2 font-mono text-slate-900 dark:text-slate-100 truncate"
+                      title={r.name}
+                    >
                       {r.name}
                     </td>
-                    <td className="px-4 py-2 font-mono text-slate-700 break-all dark:text-slate-300">
+                    <td
+                      className="px-4 py-2 font-mono text-slate-700 dark:text-slate-300 truncate"
+                      title={r.content}
+                    >
                       {r.content}
                       {r.priority !== undefined && r.priority !== null && (
                         <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">
@@ -407,7 +485,9 @@ export function Records() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
-                      {showProxied ? formatCfTtl(r.ttl, t("records.auto")) : r.ttl}
+                      {showProxied
+                        ? formatCfTtl(r.ttl, t("records.auto"))
+                        : r.ttl}
                     </td>
                     {showLine && (
                       <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
@@ -462,14 +542,22 @@ function RecordForm({
   const showLine = providerType === "huawei" || providerType === "dnspod";
 
   // DNSPod line data (fetched from API)
-  const dpLinesPath = providerType === "dnspod" && zoneId && providerId
-    ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
-    : null;
-  const { data: dpLinesData } = useFetch<{ lineId: string; name: string; parent: string | null }[]>(dpLinesPath);
+  const dpLinesPath =
+    providerType === "dnspod" && zoneId && providerId
+      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
+      : null;
+  const { data: dpLinesData } =
+    useFetch<{ lineId: string; name: string; parent: string | null }[]>(
+      dpLinesPath,
+    );
 
   // Build DNSPod line lookup maps
   const dpLineMap = useMemo(() => {
-    if (providerType !== "dnspod" || !dpLinesData) return { byId: new Map<string, string>(), children: new Map<string | null, string[]>() };
+    if (providerType !== "dnspod" || !dpLinesData)
+      return {
+        byId: new Map<string, string>(),
+        children: new Map<string | null, string[]>(),
+      };
     const byId = new Map<string, string>();
     const children = new Map<string | null, string[]>();
     for (const line of dpLinesData) {
@@ -533,7 +621,9 @@ function RecordForm({
   const [type, setType] = useState<RecordType>(record?.type ?? "A");
   const [name, setName] = useState(record?.name ?? "");
   const [content, setContent] = useState(record?.content ?? "");
-  const [ttl, setTtl] = useState<number>(record?.ttl ?? (providerType === "dnspod" ? 600 : 1));
+  const [ttl, setTtl] = useState<number>(
+    record?.ttl ?? (providerType === "dnspod" ? 600 : 1),
+  );
   const [proxied, setProxied] = useState<boolean>(record?.proxied ?? false);
 
   // When proxied changes, force TTL to 1 (auto)
@@ -559,7 +649,9 @@ function RecordForm({
 
   // Unsaved changes tracking
   const dirty = useRef(false);
-  const trackDirty = useCallback(() => { dirty.current = true; }, []);
+  const trackDirty = useCallback(() => {
+    dirty.current = true;
+  }, []);
 
   // beforeunload guard
   useEffect(() => {
@@ -593,7 +685,12 @@ function RecordForm({
     setBusy(true);
     const base = `/api/zones/${zoneId}/records`;
     const query = `?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}`;
-    const body: Record<string, unknown> = { type, name, content, ttl: providerType === "dnspod" && ttl < 600 ? 600 : ttl };
+    const body: Record<string, unknown> = {
+      type,
+      name,
+      content,
+      ttl: providerType === "dnspod" && ttl < 600 ? 600 : ttl,
+    };
     if (showProxied) body.proxied = proxied;
     if (showLine) body.line = line;
     if (showPriority && priority !== "") body.priority = Number(priority);
@@ -628,24 +725,37 @@ function RecordForm({
           label={t("records.type")}
           options={RECORD_TYPES.map((rt) => ({ value: rt, label: rt }))}
           value={type}
-          onChange={(v) => { setType(v as RecordType); trackDirty(); }}
+          onChange={(v) => {
+            setType(v as RecordType);
+            trackDirty();
+          }}
           disabled={isEdit}
         />
         {isEdit && (
-          <p className="self-end text-xs text-slate-400 dark:text-slate-500">{t("records.typeReadOnly")}</p>
+          <p className="self-end text-xs text-slate-400 dark:text-slate-500">
+            {t("records.typeReadOnly")}
+          </p>
         )}
         <Input
           label={t("records.name")}
           value={name}
-          onChange={(e) => { setName(e.target.value); trackDirty(); }}
+          onChange={(e) => {
+            setName(e.target.value);
+            trackDirty();
+          }}
           placeholder={t("records.namePlaceholder")}
           required
         />
         <Input
           label={t("records.content")}
           value={content}
-          onChange={(e) => { setContent(e.target.value); trackDirty(); }}
-          placeholder={CONTENT_PLACEHOLDER[type] ?? t("records.contentPlaceholder")}
+          onChange={(e) => {
+            setContent(e.target.value);
+            trackDirty();
+          }}
+          placeholder={
+            CONTENT_PLACEHOLDER[type] ?? t("records.contentPlaceholder")
+          }
           error={contentError}
           required
         />
@@ -654,16 +764,25 @@ function RecordForm({
             label={t("records.priority")}
             type="number"
             value={priority}
-            onChange={(e) => { setPriority(e.target.value); trackDirty(); }}
+            onChange={(e) => {
+              setPriority(e.target.value);
+              trackDirty();
+            }}
             hint={t("records.priorityHint")}
           />
         )}
         {showProxied ? (
           <Select
             label={t("records.ttl")}
-            options={CF_TTL_OPTIONS.map((opt) => ({ value: opt.value, label: cfTtlLabel(opt, t("records.auto")) }))}
+            options={CF_TTL_OPTIONS.map((opt) => ({
+              value: opt.value,
+              label: cfTtlLabel(opt, t("records.auto")),
+            }))}
             value={ttl}
-            onChange={(v) => { setTtl(Number(v)); trackDirty(); }}
+            onChange={(v) => {
+              setTtl(Number(v));
+              trackDirty();
+            }}
             disabled={proxied}
           />
         ) : (
@@ -671,24 +790,34 @@ function RecordForm({
             label={t("records.ttlSeconds")}
             type="number"
             value={ttl}
-            onChange={(e) => { setTtl(Number(e.target.value)); trackDirty(); }}
+            onChange={(e) => {
+              setTtl(Number(e.target.value));
+              trackDirty();
+            }}
           />
         )}
         {showLine && providerType === "dnspod" && (
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("records.line")}</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t("records.line")}
+            </label>
             <DnsLineSelector
               lineId={dpLineId}
               lines={dpLinesData ?? []}
               lineMap={dpLineMap}
-              onChange={(id) => { setDpLineId(id); trackDirty(); }}
+              onChange={(id) => {
+                setDpLineId(id);
+                trackDirty();
+              }}
               lang={lang}
             />
           </div>
         )}
         {showLine && providerType === "huawei" && (
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("records.line")}</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t("records.line")}
+            </label>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {/* Level 1: Category */}
               <Select
@@ -710,8 +839,17 @@ function RecordForm({
               {/* Level 2: Group */}
               <Select
                 options={[
-                  { value: "", label: lineCategory === "default" ? t("records.default") : t("records.selectDot") },
-                  ...l2Options.map((id) => ({ value: id, label: HW_DATA[id].name })),
+                  {
+                    value: "",
+                    label:
+                      lineCategory === "default"
+                        ? t("records.default")
+                        : t("records.selectDot"),
+                  },
+                  ...l2Options.map((id) => ({
+                    value: id,
+                    label: HW_DATA[id].name,
+                  })),
                 ]}
                 value={lineL2}
                 onChange={(v) => {
@@ -726,8 +864,17 @@ function RecordForm({
               {/* Level 3: Sub-group */}
               <Select
                 options={[
-                  { value: "", label: lineCategory === "default" || l3Options.length === 0 ? t("records.default") : t("records.selectDot") },
-                  ...l3Options.map((id) => ({ value: id, label: stripPrefix(HW_DATA[id].name) })),
+                  {
+                    value: "",
+                    label:
+                      lineCategory === "default" || l3Options.length === 0
+                        ? t("records.default")
+                        : t("records.selectDot"),
+                  },
+                  ...l3Options.map((id) => ({
+                    value: id,
+                    label: stripPrefix(HW_DATA[id].name),
+                  })),
                 ]}
                 value={lineL3}
                 onChange={(v) => {
@@ -741,11 +888,23 @@ function RecordForm({
               {/* Level 4: Leaf (carrier only) */}
               <Select
                 options={[
-                  { value: "", label: lineCategory !== "carrier" || l4Options.length === 0 ? t("records.default") : t("records.selectDot") },
-                  ...l4Options.map((id) => ({ value: id, label: stripPrefix(HW_DATA[id].name) })),
+                  {
+                    value: "",
+                    label:
+                      lineCategory !== "carrier" || l4Options.length === 0
+                        ? t("records.default")
+                        : t("records.selectDot"),
+                  },
+                  ...l4Options.map((id) => ({
+                    value: id,
+                    label: stripPrefix(HW_DATA[id].name),
+                  })),
                 ]}
                 value={lineL4}
-                onChange={(v) => { setLineL4(String(v)); trackDirty(); }}
+                onChange={(v) => {
+                  setLineL4(String(v));
+                  trackDirty();
+                }}
                 disabled={lineCategory !== "carrier" || l4Options.length === 0}
               />
             </div>
@@ -755,7 +914,10 @@ function RecordForm({
           <div className="self-end pb-2">
             <Toggle
               checked={proxied}
-              onChange={(v) => { handleProxiedChange(v); trackDirty(); }}
+              onChange={(v) => {
+                handleProxiedChange(v);
+                trackDirty();
+              }}
               label={t("records.proxied")}
               hint={t("records.proxiedHint")}
               onLabel={t("records.on")}
@@ -804,7 +966,10 @@ function DnsLineSelector({
 }: {
   lineId: string;
   lines: { lineId: string; name: string; parent: string | null }[];
-  lineMap: { byId: Map<string, string>; children: Map<string | null, string[]> };
+  lineMap: {
+    byId: Map<string, string>;
+    children: Map<string | null, string[]>;
+  };
   onChange: (id: string) => void;
   lang: string;
 }) {
@@ -860,7 +1025,10 @@ function DnsLineSelector({
       {/* Level 2: Children of selected group */}
       <Select
         options={[
-          { value: selectedGroup ?? defaultId, label: lineLabel(selectedGroup ?? defaultId) },
+          {
+            value: selectedGroup ?? defaultId,
+            label: lineLabel(selectedGroup ?? defaultId),
+          },
           ...childIds.map((id) => ({ value: id, label: lineLabel(id) })),
         ]}
         value={isTopLevel ? (selectedGroup ?? defaultId) : lineId}
@@ -891,10 +1059,26 @@ function ExportModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const FORMATS: { value: "json" | "zonefile" | "csv"; label: string; desc: string }[] = [
-    { value: "json", label: t("records.formatJson"), desc: t("records.formatJsonDesc") },
-    { value: "zonefile", label: t("records.formatZonefile"), desc: t("records.formatZonefileDesc") },
-    { value: "csv", label: t("records.formatCsv"), desc: t("records.formatCsvDesc") },
+  const FORMATS: {
+    value: "json" | "zonefile" | "csv";
+    label: string;
+    desc: string;
+  }[] = [
+    {
+      value: "json",
+      label: t("records.formatJson"),
+      desc: t("records.formatJsonDesc"),
+    },
+    {
+      value: "zonefile",
+      label: t("records.formatZonefile"),
+      desc: t("records.formatZonefileDesc"),
+    },
+    {
+      value: "csv",
+      label: t("records.formatCsv"),
+      desc: t("records.formatCsvDesc"),
+    },
   ];
 
   async function handleExport() {
@@ -902,12 +1086,16 @@ function ExportModal({
     setError(null);
     try {
       const query = `?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}&format=${format}`;
-      const res = await apiFetch<Response>(`/api/zones/${zoneId}/export${query}`, { raw: true });
+      const res = await apiFetch<Response>(
+        `/api/zones/${zoneId}/export${query}`,
+        { raw: true },
+      );
 
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") ?? "";
       const match = cd.match(/filename="?(.+?)"?$/);
-      const filename = match?.[1] ?? `${zoneName}.${format === "zonefile" ? "txt" : format}`;
+      const filename =
+        match?.[1] ?? `${zoneName}.${format === "zonefile" ? "txt" : format}`;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -945,16 +1133,24 @@ function ExportModal({
                 className="mt-0.5 accent-brand-600"
               />
               <div>
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{f.label}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{f.desc}</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {f.label}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  {f.desc}
+                </div>
               </div>
             </label>
           ))}
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{t("records.cancel")}</Button>
-          <Button onClick={handleExport} loading={busy}>{t("records.export")}</Button>
+          <Button variant="secondary" onClick={onClose}>
+            {t("records.cancel")}
+          </Button>
+          <Button onClick={handleExport} loading={busy}>
+            {t("records.export")}
+          </Button>
         </div>
       </div>
     </Card>
@@ -988,11 +1184,18 @@ function ImportModal({
   const { t } = useLang();
   const [format, setFormat] = useState<"json" | "zonefile" | "csv">("json");
   const [content, setContent] = useState("");
-  const [strategy, setStrategy] = useState<"skip" | "overwrite" | "append">("skip");
+  const [strategy, setStrategy] = useState<"skip" | "overwrite" | "append">(
+    "skip",
+  );
   const [preview, setPreview] = useState<PreviewRecord[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ created: number; skipped: number; updated: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{
+    created: number;
+    skipped: number;
+    updated: number;
+    errors: string[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -1010,12 +1213,14 @@ function ImportModal({
         const parsed = JSON.parse(content);
         const arr = Array.isArray(parsed) ? parsed : parsed.records;
         if (Array.isArray(arr)) {
-          const records = arr.slice(0, 20).map((r: Record<string, unknown>) => ({
-            type: String(r.type ?? ""),
-            name: String(r.name ?? ""),
-            content: String(r.content ?? ""),
-            ttl: typeof r.ttl === "number" ? r.ttl : 300,
-          }));
+          const records = arr
+            .slice(0, 20)
+            .map((r: Record<string, unknown>) => ({
+              type: String(r.type ?? ""),
+              name: String(r.name ?? ""),
+              content: String(r.content ?? ""),
+              ttl: typeof r.ttl === "number" ? r.ttl : 300,
+            }));
           setPreview(records);
           setParseErrors([]);
         } else {
@@ -1052,7 +1257,14 @@ function ImportModal({
         }
       } else {
         // Zone file — basic preview, just show non-comment lines
-        const lines = content.split("\n").filter((l) => l.trim() && !l.trim().startsWith(";") && !l.trim().startsWith("$"));
+        const lines = content
+          .split("\n")
+          .filter(
+            (l) =>
+              l.trim() &&
+              !l.trim().startsWith(";") &&
+              !l.trim().startsWith("$"),
+          );
         const records = lines.slice(0, 20).map((l) => {
           const parts = l.trim().split(/\s+/);
           return {
@@ -1094,7 +1306,12 @@ function ImportModal({
     setBusy(true);
     setError(null);
     try {
-      const res = await apiFetch<{ created: number; skipped: number; updated: number; errors: string[] }>(
+      const res = await apiFetch<{
+        created: number;
+        skipped: number;
+        updated: number;
+        errors: string[];
+      }>(
         `/api/zones/${zoneId}/import?providerId=${providerId}&zoneName=${encodeURIComponent(zoneName)}`,
         {
           method: "POST",
@@ -1115,11 +1332,17 @@ function ImportModal({
       <Card title={t("records.import")}>
         <div className="space-y-3">
           <p className="text-sm text-slate-700 dark:text-slate-300">
-            {t("records.importResult", { created: result.created, skipped: result.skipped, updated: result.updated })}
+            {t("records.importResult", {
+              created: result.created,
+              skipped: result.skipped,
+              updated: result.updated,
+            })}
           </p>
           {result.errors.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-red-600">{t("records.importErrors")}:</p>
+              <p className="text-xs font-medium text-red-600">
+                {t("records.importErrors")}:
+              </p>
               <ul className="mt-1 list-inside list-disc text-xs text-red-500">
                 {result.errors.slice(0, 10).map((e, i) => (
                   <li key={i}>{e}</li>
@@ -1174,8 +1397,18 @@ function ImportModal({
             onClick={() => fileRef.current?.click()}
             className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-brand-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" />
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+              />
             </svg>
             {fileName ?? "Choose file…"}
           </button>
@@ -1184,7 +1417,13 @@ function ImportModal({
             onChange={(e) => setContent(e.target.value)}
             rows={8}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
-            placeholder={format === "json" ? '[{ "type": "A", "name": "www", "content": "1.2.3.4", "ttl": 300 }]' : format === "csv" ? "type,name,content,ttl\nA,www,1.2.3.4,300" : "www  300  IN  A  1.2.3.4"}
+            placeholder={
+              format === "json"
+                ? '[{ "type": "A", "name": "www", "content": "1.2.3.4", "ttl": 300 }]'
+                : format === "csv"
+                  ? "type,name,content,ttl\nA,www,1.2.3.4,300"
+                  : "www  300  IN  A  1.2.3.4"
+            }
           />
         </div>
 
@@ -1195,7 +1434,9 @@ function ImportModal({
               {t("records.parseErrors", { count: parseErrors.length })}
             </p>
             <ul className="mt-1 list-inside list-disc text-xs text-yellow-600 dark:text-yellow-500">
-              {parseErrors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+              {parseErrors.slice(0, 5).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
             </ul>
           </div>
         )}
@@ -1218,10 +1459,15 @@ function ImportModal({
                 </thead>
                 <tbody>
                   {preview.map((r, i) => (
-                    <tr key={i} className="border-b border-slate-100 last:border-b-0 dark:border-slate-700">
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 last:border-b-0 dark:border-slate-700"
+                    >
                       <td className="px-2 py-1 font-mono">{r.type}</td>
                       <td className="px-2 py-1 font-mono">{r.name}</td>
-                      <td className="max-w-[200px] truncate px-2 py-1 font-mono">{r.content}</td>
+                      <td className="max-w-[200px] truncate px-2 py-1 font-mono">
+                        {r.content}
+                      </td>
                       <td className="px-2 py-1">{r.ttl}</td>
                     </tr>
                   ))}
@@ -1236,11 +1482,25 @@ function ImportModal({
           <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
             {t("records.conflictStrategy")}
           </label>
-          {([
-            { value: "skip", label: t("records.skip"), desc: t("records.skipDesc") },
-            { value: "overwrite", label: t("records.overwrite"), desc: t("records.overwriteDesc") },
-            { value: "append", label: t("records.append"), desc: t("records.appendDesc") },
-          ] as const).map((s) => (
+          {(
+            [
+              {
+                value: "skip",
+                label: t("records.skip"),
+                desc: t("records.skipDesc"),
+              },
+              {
+                value: "overwrite",
+                label: t("records.overwrite"),
+                desc: t("records.overwriteDesc"),
+              },
+              {
+                value: "append",
+                label: t("records.append"),
+                desc: t("records.appendDesc"),
+              },
+            ] as const
+          ).map((s) => (
             <label
               key={s.value}
               className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
@@ -1258,8 +1518,12 @@ function ImportModal({
                 className="mt-0.5 accent-brand-600"
               />
               <div>
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{s.label}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{s.desc}</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {s.label}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  {s.desc}
+                </div>
               </div>
             </label>
           ))}
@@ -1269,7 +1533,9 @@ function ImportModal({
 
         {/* Actions */}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{t("records.cancel")}</Button>
+          <Button variant="secondary" onClick={onClose}>
+            {t("records.cancel")}
+          </Button>
           <Button
             onClick={handleImport}
             loading={busy}
@@ -1329,7 +1595,8 @@ function DeleteButton({
     return (
       <div className="flex flex-col gap-2">
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          {t("records.deleteConfirmName")}: <span className="font-mono font-medium">{recordName}</span>
+          {t("records.deleteConfirmName")}:{" "}
+          <span className="font-mono font-medium">{recordName}</span>
         </p>
         <Input
           label={t("records.name")}
@@ -1339,12 +1606,20 @@ function DeleteButton({
           inputRef={inputRef}
         />
         <span className="inline-flex items-center gap-1">
-          <Button variant="danger" onClick={remove} loading={busy} disabled={!nameMatch}>
+          <Button
+            variant="danger"
+            onClick={remove}
+            loading={busy}
+            disabled={!nameMatch}
+          >
             {t("records.confirm")}
           </Button>
           <Button
             variant="secondary"
-            onClick={() => { setConfirming(false); setConfirmInput(""); }}
+            onClick={() => {
+              setConfirming(false);
+              setConfirmInput("");
+            }}
             disabled={busy}
           >
             {t("records.cancel")}
