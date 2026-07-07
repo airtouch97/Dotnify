@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { useFetch } from "@/hooks/useFetch";
+import { useFetch, invalidate } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { Provider, ProviderType, Zone } from "@/lib/types";
 import { Card } from "@/components/Card";
@@ -40,7 +40,7 @@ export function Providers() {
         </Button>
       </div>
 
-      {showForm && <AddForm onSaved={() => { setShowForm(false); void refetch(); }} onCancel={() => setShowForm(false)} />}
+      {showForm && <AddForm onSaved={() => { invalidate("/api/zones"); setShowForm(false); void refetch(); }} onCancel={() => setShowForm(false)} />}
 
       {loading ? (
         <Spinner label="Loading providers" />
@@ -57,7 +57,7 @@ export function Providers() {
       ) : (
         <ul className="space-y-3">
           {providers.map((p) => (
-            <ProviderRow key={p.id} provider={p} onChanged={() => void refetch()} />
+            <ProviderRow key={p.id} provider={p} onChanged={() => { invalidate("/api/zones"); void refetch(); }} />
           ))}
         </ul>
       )}

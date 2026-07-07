@@ -13,7 +13,7 @@ interface ZonesResponse {
 
 export function Home() {
   const { t } = useLang();
-  const { data } = useFetch<ZonesResponse>("/api/zones");
+  const { data } = useFetch<ZonesResponse>("/api/zones", { cacheTtl: 604800 });
   const { data: providers } = useFetch<Provider[]>("/api/providers");
   const zones = data?.zones ?? [];
   const providerCount = providers?.length ?? 0;

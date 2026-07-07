@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
-import { useFetch } from "@/hooks/useFetch";
+import { useFetch, invalidate } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { Provider, Zone, ZoneWithProvider } from "@/lib/types";
 import { Card } from "@/components/Card";
@@ -19,7 +19,7 @@ interface ZonesResponse {
 
 export function Zones() {
   const { t } = useLang();
-  const { data, loading, error, isValidating, refetch } = useFetch<ZonesResponse>("/api/zones");
+  const { data, loading, error, isValidating, refetch } = useFetch<ZonesResponse>("/api/zones", { cacheTtl: 604800 });
   const zones = data?.zones ?? [];
   const providerErrors = data?.errors ?? [];
   const [showForm, setShowForm] = useState(false);
@@ -62,7 +62,7 @@ export function Zones() {
         </div>
       </div>
 
-      {showForm && <AddDomainForm managedZones={zones} onSaved={() => { setShowForm(false); void refetch(); }} onCancel={() => setShowForm(false)} />}
+      {showForm && <AddDomainForm managedZones={zones} onSaved={() => { invalidate("/api/zones"); setShowForm(false); void refetch(); }} onCancel={() => setShowForm(false)} />}
 
       {zones.length > 0 && (
         <div className="flex items-center gap-3">
@@ -114,7 +114,7 @@ export function Zones() {
       ) : (
         <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
           {filteredZones.map((z) => (
-            <ZoneRow key={`${z.providerId}:${z.id}`} zone={z} allZones={zones} onRemoved={() => void refetch()} />
+            <ZoneRow key={`${z.providerId}:${z.id}`} zone={z} allZones={zones} onRemoved={() => { invalidate("/api/zones"); void refetch(); }} />
           ))}
         </ul>
       )}

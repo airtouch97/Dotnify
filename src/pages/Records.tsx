@@ -184,7 +184,7 @@ export function Records() {
   const state = location.state as { providerId?: string; providerType?: ProviderType; zoneName?: string } | null;
 
   // Fallback: if state is missing (direct URL / refresh), fetch zone info from API
-  const { data: zonesData } = useFetch<{ zones: ZoneWithProvider[] }>(!state?.providerId && zoneId ? "/api/zones" : null);
+  const { data: zonesData } = useFetch<{ zones: ZoneWithProvider[] }>(!state?.providerId && zoneId ? "/api/zones" : null, { cacheTtl: 604800 });
   const fallbackZone = zonesData?.zones.find((z) => z.id === zoneId);
 
   const providerId = state?.providerId ?? fallbackZone?.providerId ?? null;
