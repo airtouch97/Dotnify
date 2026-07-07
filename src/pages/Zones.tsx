@@ -292,7 +292,8 @@ function ZoneRow({ zone, allZones, onRemoved }: { zone: ZoneWithProvider; allZon
     <li className="border-b border-slate-100 last:border-b-0 dark:border-slate-700">
       <div className="flex items-center gap-3 px-5 py-3">
         <Link
-          to={`/domains/${zone.id}/records?providerId=${zone.providerId}&providerType=${zone.providerType}&zoneName=${encodeURIComponent(zone.name)}`}
+          to={`/domains/${zone.id}/records`}
+          state={{ providerId: zone.providerId, providerType: zone.providerType, zoneName: zone.name }}
           className="flex min-w-0 flex-1 items-center gap-3 transition-colors hover:bg-slate-50 -mx-5 -my-3 px-5 py-3 dark:hover:bg-slate-700"
         >
           <ProviderLogo type={zone.providerType} />

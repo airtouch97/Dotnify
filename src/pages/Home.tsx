@@ -48,7 +48,8 @@ export function Home() {
             {zones.slice(0, 10).map((z) => (
               <li key={`${z.providerId}:${z.id}`} className="border-b border-slate-100 last:border-b-0 dark:border-slate-700">
                 <Link
-                  to={`/domains/${z.id}/records?providerId=${z.providerId}&providerType=${z.providerType}&zoneName=${encodeURIComponent(z.name)}`}
+                  to={`/domains/${z.id}/records`}
+                  state={{ providerId: z.providerId, providerType: z.providerType, zoneName: z.name }}
                   className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
                   <ProviderLogo type={z.providerType} />

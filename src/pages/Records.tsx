@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { getToken } from "@/lib/token";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
-import type { DnsRecord, ProviderType, RecordType } from "@/lib/types";
+import type { DnsRecord, ProviderType, RecordType, ZoneWithProvider } from "@/lib/types";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
@@ -180,10 +180,16 @@ function formatCfTtl(seconds: number, autoLabel: string): string {
 export function Records() {
   const { t, lang } = useLang();
   const { zoneId } = useParams<{ zoneId: string }>();
-  const [search] = useSearchParams();
-  const providerId = search.get("providerId");
-  const providerType = (search.get("providerType") ?? "cloudflare") as ProviderType;
-  const zoneName = search.get("zoneName") ?? "";
+  const location = useLocation();
+  const state = location.state as { providerId?: string; providerType?: ProviderType; zoneName?: string } | null;
+
+  // Fallback: if state is missing (direct URL / refresh), fetch zone info from API
+  const { data: zonesData } = useFetch<{ zones: ZoneWithProvider[] }>(!state?.providerId && zoneId ? "/api/zones" : null);
+  const fallbackZone = zonesData?.zones.find((z) => z.id === zoneId);
+
+  const providerId = state?.providerId ?? fallbackZone?.providerId ?? null;
+  const providerType = (state?.providerType ?? fallbackZone?.providerType ?? "cloudflare") as ProviderType;
+  const zoneName = state?.zoneName ?? fallbackZone?.name ?? "";
   const showProxied = providerType === "cloudflare";
   const showLine = providerType === "huawei" || providerType === "dnspod";
 

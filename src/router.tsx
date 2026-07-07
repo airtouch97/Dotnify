@@ -95,7 +95,6 @@ export const router = createBrowserRouter([
       { path: "domains/:zoneId/records", element: <AuthGuard><Records /></AuthGuard>, handle: { titleKey: "" } },
       // Legacy redirect
       { path: "zones", element: <Navigate to="/domains" replace /> },
-      { path: "zones/:zoneId/records", element: <AuthGuard><Records /></AuthGuard> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
