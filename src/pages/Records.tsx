@@ -339,10 +339,10 @@ export function Records() {
                   <th className="px-4 py-2 font-medium">{t("records.type")}</th>
                   <th className="px-4 py-2 font-medium">{t("records.name")}</th>
                   <th className="px-4 py-2 font-medium">{t("records.content")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.ttl")}</th>
+                  <th className="px-4 py-2 font-medium w-24">{t("records.ttl")}</th>
                   {showLine && <th className="px-4 py-2 font-medium">{t("records.line")}</th>}
                   {showProxied && <th className="px-4 py-2 font-medium">{t("records.proxied")}</th>}
-                  <th className="px-4 py-2 text-right font-medium">{t("records.actions")}</th>
+                  <th className="px-4 py-2 text-right font-medium w-28">{t("records.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,10 +378,10 @@ export function Records() {
                   <th className="px-4 py-2 font-medium">{t("records.type")}</th>
                   <th className="px-4 py-2 font-medium">{t("records.name")}</th>
                   <th className="px-4 py-2 font-medium">{t("records.content")}</th>
-                  <th className="px-4 py-2 font-medium">{t("records.ttl")}</th>
+                  <th className="px-4 py-2 font-medium w-24">{t("records.ttl")}</th>
                   {showLine && <th className="px-4 py-2 font-medium">{t("records.line")}</th>}
                   {showProxied && <th className="px-4 py-2 font-medium">{t("records.proxied")}</th>}
-                  <th className="px-4 py-2 text-right font-medium">{t("records.actions")}</th>
+                  <th className="px-4 py-2 text-right font-medium w-28">{t("records.actions")}</th>
                 </tr>
               </thead>
               <tbody>
