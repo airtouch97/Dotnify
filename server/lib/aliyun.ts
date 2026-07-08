@@ -1,25 +1,17 @@
-import { createHmac, createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 // ---------------------------------------------------------------------------
-// Alibaba Cloud DNS (Alidns) API client — ACS3-HMAC-SHA256 signing + fetch.
+// Alibaba Cloud DNS (Alidns) API client — V1 HMAC-SHA1 signing + fetch.
 // Reference: https://help.aliyun.com/document_detail/Alidns_API_Reference
+// Uses the classic Alibaba Cloud signature (same as the PHP reference).
 // ---------------------------------------------------------------------------
 
 const ENDPOINT = "alidns.aliyuncs.com";
 const VERSION = "2015-01-09";
-const ALGORITHM = "ACS3-HMAC-SHA256";
-
-function sha256Hex(data: string): string {
-  return createHash("sha256").update(data).digest("hex");
-}
-
-function hmacSha256Hex(key: string, data: string): string {
-  return createHmac("sha256", key).update(data).digest("hex");
-}
 
 /**
- * URI-encode per Alibaba Cloud ACS3 spec.
- * Unreserved chars: A-Z a-z 0-9 - . _ ~
+ * Percent-encode per Alibaba Cloud V1 spec.
+ * + → %20, * → %2A, %7E → ~
  */
 function percentEncode(str: string): string {
   return encodeURIComponent(str)
@@ -27,72 +19,32 @@ function percentEncode(str: string): string {
     .replace(/'/g, "%27")
     .replace(/\(/g, "%28")
     .replace(/\)/g, "%29")
-    .replace(/\*/g, "%2A");
+    .replace(/\*/g, "%2A")
+    .replace(/%7E/g, "~")
+    .replace(/\+/g, "%20");
 }
 
 /**
- * CanonicalURI: each path segment URI-encoded.
+ * Generate Alibaba Cloud V1 HMAC-SHA1 signature.
  */
-function canonicalURI(pathname: string): string {
-  if (!pathname || pathname === "/") return "/";
-  const segments = pathname.split("/").map((s) => percentEncode(s));
-  return segments.join("/");
-}
-
-/**
- * CanonicalQueryString: keys & values URI-encoded, sorted by key.
- */
-function canonicalQueryString(params: Record<string, string> | undefined): string {
-  if (!params || Object.keys(params).length === 0) return "";
-  return Object.entries(params)
-    .map(([k, v]) => `${percentEncode(k)}=${percentEncode(v)}`)
-    .sort()
+function generateSignature(
+  params: Record<string, string>,
+  accessKeySecret: string,
+  method: string
+): string {
+  // Sort parameters by key
+  const sortedKeys = Object.keys(params).sort();
+  const canonicalQueryString = sortedKeys
+    .map((k) => `${percentEncode(k)}=${percentEncode(params[k])}`)
     .join("&");
+  const stringToSign = `${method}&${percentEncode("/")}&${percentEncode(canonicalQueryString)}`;
+  return createHmac("sha1", accessKeySecret + "&")
+    .update(stringToSign)
+    .digest("base64");
 }
 
 /**
- * Build the Authorization header using ACS3-HMAC-SHA256 signing.
- */
-function signRequest(opts: {
-  method: string;
-  url: URL;
-  headers: Record<string, string>;
-  body?: string;
-  accessKeySecret: string;
-  accessKeyId: string;
-}): Record<string, string> {
-  const { method, url, headers, body, accessKeySecret, accessKeyId } = opts;
-
-  const allHeaders: Record<string, string> = { ...headers };
-
-  // Canonical request
-  const cURI = canonicalURI(url.pathname);
-  const cQS = canonicalQueryString(
-    Object.fromEntries(url.searchParams.entries()) as Record<string, string>
-  );
-
-  const headerEntries = Object.entries(allHeaders)
-    .map(([k, v]) => ({ k: k.toLowerCase(), v: v.trim() }))
-    .sort((a, b) => a.k.localeCompare(b.k));
-  const cHeaders = headerEntries.map(({ k, v }) => `${k}:${v}\n`).join("");
-  const signedHeaderNames = headerEntries.map(({ k }) => k).join(";");
-
-  // Payload hash
-  const payloadHash = body ? sha256Hex(body) : sha256Hex("");
-
-  const canonicalRequest = [method, cURI, cQS, cHeaders, signedHeaderNames, payloadHash].join("\n");
-  const hashedCanonicalRequest = sha256Hex(canonicalRequest);
-  const stringToSign = `${ALGORITHM}\n${hashedCanonicalRequest}`;
-  const signature = hmacSha256Hex(accessKeySecret, stringToSign);
-
-  return {
-    ...allHeaders,
-    Authorization: `${ALGORITHM} Credential=${accessKeyId},SignedHeaders=${signedHeaderNames},Signature=${signature}`,
-  };
-}
-
-/**
- * Call the Alibaba Cloud Alidns API with ACS3-HMAC-SHA256 signing.
+ * Call the Alibaba Cloud Alidns API with V1 HMAC-SHA1 signing.
  */
 async function aliyunFetch<T>(
   accessKeyId: string,
@@ -101,60 +53,58 @@ async function aliyunFetch<T>(
   init: {
     method?: string;
     params?: Record<string, string | number | boolean | null | undefined>;
-    body?: Record<string, unknown>;
   } = {}
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
 
-  // Filter null/undefined params
-  const queryParams: Record<string, string> = {};
-  if (init.params) {
-    for (const [k, v] of Object.entries(init.params)) {
-      if (v !== null && v !== undefined) queryParams[k] = String(v);
-    }
-  }
-
-  const url = new URL(`https://${ENDPOINT}/`);
-  const bodyStr = init.body !== undefined ? JSON.stringify(init.body) : undefined;
-
-  const headers: Record<string, string> = {
-    host: ENDPOINT,
-    "x-acs-action": action,
-    "x-acs-version": VERSION,
-    "x-acs-signature-nonce": createHash("md5")
-      .update(`${Date.now()}-${Math.random()}`)
-      .digest("hex"),
-    "x-acs-date": new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    "x-acs-content-sha256": sha256Hex(bodyStr ?? ""),
+  // Build common parameters
+  const commonParams: Record<string, string> = {
+    Format: "JSON",
+    Version: VERSION,
+    AccessKeyId: accessKeyId,
+    SignatureMethod: "HMAC-SHA1",
+    Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    SignatureVersion: "1.0",
+    SignatureNonce: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    Action: action,
   };
 
-  if (bodyStr) {
-    headers["content-type"] = "application/json; charset=utf-8";
-  }
-
-  // For GET/DELETE: params go in query string
-  if (method === "GET" || method === "DELETE") {
-    for (const [k, v] of Object.entries(queryParams)) {
-      url.searchParams.set(k, v);
+  // Merge action-specific params (filter null/undefined)
+  if (init.params) {
+    for (const [k, v] of Object.entries(init.params)) {
+      if (v !== null && v !== undefined) commonParams[k] = String(v);
     }
   }
 
-  const signedHeaders = signRequest({
-    method,
-    url,
-    headers,
-    body: bodyStr,
-    accessKeyId,
-    accessKeySecret,
-  });
+  // Compute signature
+  const signature = generateSignature(commonParams, accessKeySecret, method);
+  commonParams.Signature = signature;
+
+  // Build URL and body based on method
+  const url = new URL(`https://${ENDPOINT}/`);
+  let body: string | undefined;
+
+  if (method === "GET") {
+    for (const [k, v] of Object.entries(commonParams)) {
+      url.searchParams.set(k, v);
+    }
+  } else {
+    // POST: form-encoded body
+    body = Object.entries(commonParams)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+  }
 
   const res = await fetch(url, {
     method,
-    headers: signedHeaders,
-    body: bodyStr,
+    headers: body
+      ? { "Content-Type": "application/x-www-form-urlencoded" }
+      : {},
+    body,
   });
 
   const text = await res.text();
+  console.error(`[aliyun] ${method} ${action} → ${res.status}`, text.slice(0, 500));
   let json: Record<string, unknown> | null = null;
   try {
     json = JSON.parse(text);
@@ -166,7 +116,6 @@ async function aliyunFetch<T>(
     let msg = `Alibaba Cloud request failed (${res.status})`;
     if (json) {
       if (typeof json.Message === "string") {
-        // Trim after first sentence for cleaner error messages
         const dotIdx = (json.Message as string).indexOf(".");
         msg = dotIdx > 0 ? (json.Message as string).slice(0, dotIdx + 1) : (json.Message as string);
       } else if (typeof json.message === "string") {
@@ -220,7 +169,7 @@ export async function listZones(accessKeyId: string, accessKeySecret: string): P
     Domains?: { Domain?: { DomainId?: string; DomainName?: string; RecordCount?: number; DnsStatus?: string }[] };
     TotalCount?: number;
   }>(accessKeyId, accessKeySecret, "DescribeDomains", {
-    params: { PageNumber: 1, PageSize: 100 },
+    params: { PageNumber: 1, PageSize: 50 },
   });
 
   return (resp.Domains?.Domain ?? []).map((d) => ({
@@ -232,21 +181,30 @@ export async function listZones(accessKeyId: string, accessKeySecret: string): P
 }
 
 /**
- * List all records in a domain.
+ * List all records in a domain (with pagination, max PageSize=500).
  */
 export async function listRecords(
   accessKeyId: string,
   accessKeySecret: string,
   domain: string
 ): Promise<AliyunRecord[]> {
-  const resp = await aliyunFetch<{
-    DomainRecords?: { Record?: AliyunApiRecord[] };
-    TotalCount?: number;
-  }>(accessKeyId, accessKeySecret, "DescribeDomainRecords", {
-    params: { DomainName: domain, PageNumber: 1, PageSize: 3000 },
-  });
-
-  return (resp.DomainRecords?.Record ?? []).map(normalizeApiRecord);
+  const all: AliyunRecord[] = [];
+  let page = 1;
+  const pageSize = 500;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const resp = await aliyunFetch<{
+      DomainRecords?: { Record?: AliyunApiRecord[] };
+      TotalCount?: number;
+    }>(accessKeyId, accessKeySecret, "DescribeDomainRecords", {
+      params: { DomainName: domain, PageNumber: page, PageSize: pageSize },
+    });
+    const batch = (resp.DomainRecords?.Record ?? []).map(normalizeApiRecord);
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    page++;
+  }
+  return all;
 }
 
 interface AliyunApiRecord {
@@ -297,7 +255,7 @@ export async function createRecord(
     weight?: number;
   }
 ): Promise<AliyunRecord> {
-  const body: Record<string, unknown> = {
+  const apiParams: Record<string, string | number | boolean | null | undefined> = {
     DomainName: domain,
     RR: params.name,
     Type: params.type,
@@ -306,15 +264,15 @@ export async function createRecord(
     TTL: params.ttl ?? 600,
   };
   if (params.type === "MX" && params.mx !== undefined) {
-    body.Priority = params.mx;
+    apiParams.Priority = params.mx;
   }
   if (params.weight !== undefined && params.weight > 0) {
-    body.Weight = params.weight;
+    apiParams.Weight = params.weight;
   }
 
   const resp = await aliyunFetch<{ RecordId?: string }>(
     accessKeyId, accessKeySecret, "AddDomainRecord",
-    { method: "POST", body }
+    { method: "POST", params: apiParams }
   );
 
   return {
@@ -348,7 +306,7 @@ export async function updateRecord(
     weight?: number;
   }
 ): Promise<void> {
-  const body: Record<string, unknown> = {
+  const apiParams: Record<string, string | number | boolean | null | undefined> = {
     RecordId: recordId,
     RR: params.name,
     Type: params.type,
@@ -357,15 +315,15 @@ export async function updateRecord(
     TTL: params.ttl ?? 600,
   };
   if (params.type === "MX" && params.mx !== undefined) {
-    body.Priority = params.mx;
+    apiParams.Priority = params.mx;
   }
   if (params.weight !== undefined && params.weight > 0) {
-    body.Weight = params.weight;
+    apiParams.Weight = params.weight;
   }
 
   await aliyunFetch(accessKeyId, accessKeySecret, "UpdateDomainRecord", {
     method: "POST",
-    body,
+    params: apiParams,
   });
 }
 
@@ -379,7 +337,7 @@ export async function deleteRecord(
 ): Promise<void> {
   await aliyunFetch(accessKeyId, accessKeySecret, "DeleteDomainRecord", {
     method: "POST",
-    body: { RecordId: recordId },
+    params: { RecordId: recordId },
   });
 }
 
@@ -395,7 +353,7 @@ export async function setRecordStatus(
   const apiStatus = status === "enable" ? "Enable" : "Disable";
   await aliyunFetch(accessKeyId, accessKeySecret, "SetDomainRecordStatus", {
     method: "POST",
-    body: { RecordId: recordId, Status: apiStatus },
+    params: { RecordId: recordId, Status: apiStatus },
   });
 }
 
