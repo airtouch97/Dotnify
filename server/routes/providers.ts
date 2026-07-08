@@ -6,6 +6,7 @@ import { ok, error, notFound } from "../lib/response.js";
 import { cfFetch } from "../lib/cloudflare.js";
 import { listZones as hwListZones } from "../lib/huawei.js";
 import { listZones as dpListZones } from "../lib/dnspod.js";
+import { listZones as aliyunListZones } from "../lib/aliyun.js";
 import type { Provider, Zone } from "../lib/types.js";
 import type { AuthedVariables } from "../lib/types.js";
 
@@ -71,8 +72,8 @@ providers.post("/", async (c) => {
   const region = body.region?.trim();
   const selectedZones = Array.isArray(body.selectedZones) ? body.selectedZones : [];
 
-  if (type !== "cloudflare" && type !== "huawei" && type !== "dnspod") {
-    return error(c, "Only 'cloudflare', 'huawei' and 'dnspod' provider types are supported");
+  if (type !== "cloudflare" && type !== "huawei" && type !== "dnspod" && type !== "aliyun") {
+    return error(c, "Only 'cloudflare', 'huawei', 'dnspod' and 'aliyun' provider types are supported");
   }
   if (!name) return error(c, "Name is required");
 
@@ -115,7 +116,7 @@ providers.post("/", async (c) => {
     } catch {
       return error(c, "Huawei Cloud verification failed", 422);
     }
-  } else {
+  } else if (type === "dnspod") {
     // DNSPod (Tencent Cloud)
     if (!apiAccessKey) return error(c, "SecretId is required");
     if (!apiSecretKey) return error(c, "SecretKey is required");
@@ -132,6 +133,23 @@ providers.post("/", async (c) => {
     } catch {
       return error(c, "DNSPod verification failed", 422);
     }
+  } else {
+    // Alibaba Cloud (Aliyun)
+    if (!apiAccessKey) return error(c, "AccessKey ID is required");
+    if (!apiSecretKey) return error(c, "AccessKey Secret is required");
+
+    try {
+      const zones = await aliyunListZones(apiAccessKey, apiSecretKey);
+      if (selectedZones.length > 0) {
+        const validIds = new Set(zones.map((z) => z.id));
+        const invalid = selectedZones.filter((id) => !validIds.has(id));
+        if (invalid.length > 0) {
+          return error(c, "Some selected zones are not accessible", 422);
+        }
+      }
+    } catch {
+      return error(c, "Alibaba Cloud verification failed", 422);
+    }
   }
 
   const provider: Provider = {
@@ -141,6 +159,7 @@ providers.post("/", async (c) => {
     apiKey: type === "cloudflare" ? apiKey! : "",
     ...(type === "huawei" ? { apiAccessKey, apiSecretKey, region } : {}),
     ...(type === "dnspod" ? { apiAccessKey, apiSecretKey } : {}),
+    ...(type === "aliyun" ? { apiAccessKey, apiSecretKey } : {}),
     createdAt: new Date().toISOString(),
     selectedZones,
   };
@@ -219,7 +238,19 @@ providers.post("/verify", async (c) => {
     }
   }
 
-  return error(c, "Only 'cloudflare', 'huawei' and 'dnspod' provider types are supported");
+  if (type === "aliyun") {
+    if (!apiAccessKey) return error(c, "AccessKey ID is required");
+    if (!apiSecretKey) return error(c, "AccessKey Secret is required");
+
+    try {
+      const zones = await aliyunListZones(apiAccessKey, apiSecretKey);
+      return ok(c, zones);
+    } catch {
+      return error(c, "Alibaba Cloud verification failed", 422);
+    }
+  }
+
+  return error(c, "Only 'cloudflare', 'huawei', 'dnspod' and 'aliyun' provider types are supported");
 });
 
 async function loadProviders(): Promise<Provider[]> {
@@ -305,6 +336,24 @@ providers.patch("/:id", async (c) => {
       if (newAk) provider.apiAccessKey = newAk;
       if (newSk) provider.apiSecretKey = newSk;
     }
+  } else if (provider.type === "aliyun") {
+    const newAk = body.apiAccessKey?.trim();
+    const newSk = body.apiSecretKey?.trim();
+    const credsChanged =
+      (newAk && newAk !== provider.apiAccessKey) ||
+      (newSk && newSk !== provider.apiSecretKey);
+
+    if (credsChanged) {
+      const ak = newAk || provider.apiAccessKey || "";
+      const sk = newSk || provider.apiSecretKey || "";
+      try {
+        await aliyunListZones(ak, sk);
+      } catch {
+        return error(c, "Alibaba Cloud verification failed", 422);
+      }
+      if (newAk) provider.apiAccessKey = newAk;
+      if (newSk) provider.apiSecretKey = newSk;
+    }
   }
 
   if (Array.isArray(body.selectedZones)) {
@@ -367,6 +416,14 @@ providers.get("/:id/zones", async (c) => {
 
     if (provider.type === "dnspod") {
       const zones = await dpListZones(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? ""
+      );
+      return ok(c, zones);
+    }
+
+    if (provider.type === "aliyun") {
+      const zones = await aliyunListZones(
         provider.apiAccessKey ?? "",
         provider.apiSecretKey ?? ""
       );

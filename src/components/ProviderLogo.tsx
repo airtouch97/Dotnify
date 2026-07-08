@@ -1,10 +1,11 @@
 import type { ProviderType } from "@/lib/types";
-import { CloudflareLogo, HuaweiCloudLogo, DnspodLogo } from "@/lib/provider-logos";
+import { CloudflareLogo, HuaweiCloudLogo, DnspodLogo, AliyunCloudLogo } from "@/lib/provider-logos";
 
 const LABELS: Record<ProviderType, string> = {
   cloudflare: "Cloudflare",
   huawei: "Huawei Cloud",
   dnspod: "DNSPod",
+  aliyun: "Alibaba Cloud",
 };
 
 export function ProviderLogo({ type, size = "sm" }: { type: ProviderType; size?: "sm" | "md" }) {
@@ -16,6 +17,7 @@ export function ProviderLogo({ type, size = "sm" }: { type: ProviderType; size?:
       case "cloudflare": return <CloudflareLogo />;
       case "huawei": return <HuaweiCloudLogo />;
       case "dnspod": return <DnspodLogo />;
+      case "aliyun": return <AliyunCloudLogo />;
       default: return null;
     }
   })();

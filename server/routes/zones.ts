@@ -21,6 +21,15 @@ import {
   listLines as dpListLines,
 } from "../lib/dnspod.js";
 import type { DpRecord } from "../lib/dnspod.js";
+import {
+  listZones as aliyunListZones,
+  listRecords as aliyunListRecords,
+  createRecord as aliyunCreateRecord,
+  updateRecord as aliyunUpdateRecord,
+  deleteRecord as aliyunDeleteRecord,
+  listLines as aliyunListLines,
+} from "../lib/aliyun.js";
+import type { AliyunRecord } from "../lib/aliyun.js";
 import type { Provider, Zone, DnsRecord } from "../lib/types.js";
 import type { AuthedVariables } from "../lib/types.js";
 import { toJson, toZoneFile, toCsv } from "../lib/export.js";
@@ -77,6 +86,11 @@ zones.get("/", async (c) => {
             p.apiAccessKey ?? "",
             p.apiSecretKey ?? ""
           );
+        } else if (p.type === "aliyun") {
+          zoneList = await aliyunListZones(
+            p.apiAccessKey ?? "",
+            p.apiSecretKey ?? ""
+          );
         }
 
         const selected = Array.isArray(p.selectedZones) ? p.selectedZones : [];
@@ -127,6 +141,28 @@ zones.get("/:zoneId/lines", async (c) => {
       return ok(c, lines);
     } catch {
       return error(c, "Failed to fetch DNSPod lines", 502);
+    }
+  }
+
+  if (providerType === "aliyun" && providerId) {
+    const provider = await findProvider(providerId);
+    if (!provider) return notFound(c, "Provider not found");
+    const zoneName = c.req.query("zoneName") ?? "";
+    try {
+      const lines = await aliyunListLines(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      // Map lineCode → lineId for frontend compatibility
+      const mapped = lines.map((l) => ({
+        lineId: l.lineCode,
+        name: l.name,
+        parent: l.parent,
+      }));
+      return ok(c, mapped);
+    } catch {
+      return error(c, "Failed to fetch Alibaba Cloud lines", 502);
     }
   }
 
@@ -195,6 +231,21 @@ function normalizeDp(r: DpRecord): DnsRecord {
   };
 }
 
+function normalizeAliyun(r: AliyunRecord): DnsRecord {
+  return {
+    id: r.id,
+    type: r.type as DnsRecord["type"],
+    name: r.name,
+    content: r.content,
+    ttl: r.ttl,
+    line: r.line,
+    priority: r.type === "MX" ? r.mx : undefined,
+    status: r.status === "ENABLE" ? "enable" : "disable",
+    weight: r.weight || undefined,
+    comment: r.remark,
+  };
+}
+
 async function resolveDpLineName(secretId: string, secretKey: string, domain: string, lineId: string | undefined): Promise<string> {
   if (!lineId || lineId === "0") return "Default";
   try {
@@ -245,6 +296,16 @@ zones.get("/:zoneId/records", async (c) => {
         zoneName
       );
       const records = dpRecords.map(normalizeDp);
+      return ok(c, records);
+    }
+
+    if (provider.type === "aliyun") {
+      const aliyunRecords = await aliyunListRecords(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      const records = aliyunRecords.map(normalizeAliyun);
       return ok(c, records);
     }
 
@@ -328,6 +389,22 @@ zones.post("/:zoneId/records", async (c) => {
         weight: body.weight,
       });
       return ok(c, normalizeDp(r), 201);
+    }
+
+    if (provider.type === "aliyun") {
+      const ak = provider.apiAccessKey ?? "";
+      const sk = provider.apiSecretKey ?? "";
+      const aliyunTtl = Math.max(Number(body.ttl) || 600, 600);
+      const r = await aliyunCreateRecord(ak, sk, zoneName, {
+        name: body.name,
+        type: body.type,
+        content: body.content,
+        line: body.line,
+        ttl: aliyunTtl,
+        mx: body.priority,
+        weight: body.weight,
+      });
+      return ok(c, normalizeAliyun(r), 201);
     }
 
     return error(c, `Unsupported provider type: ${provider.type}`, 400);
@@ -432,6 +509,33 @@ zones.patch("/:zoneId/records/:recordId", async (c) => {
       return ok(c, normalizeDp(updated));
     }
 
+    if (provider.type === "aliyun") {
+      const ak = provider.apiAccessKey ?? "";
+      const sk = provider.apiSecretKey ?? "";
+
+      // Aliyun UpdateDomainRecord requires all fields, so fetch existing first
+      const existingRecords = await aliyunListRecords(ak, sk, zoneName);
+      const existing = existingRecords.find((r) => r.id === recordId);
+      if (!existing) return notFound(c, "Record not found");
+
+      const aliyunTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
+      await aliyunUpdateRecord(ak, sk, recordId, {
+        name: body.name ?? existing.name,
+        type: body.type ?? existing.type,
+        content: body.content ?? existing.content,
+        line: body.line ?? existing.line,
+        ttl: aliyunTtl,
+        mx: body.priority ?? existing.mx,
+        weight: body.weight ?? existing.weight,
+      });
+
+      // Re-fetch the updated record
+      const updatedRecords = await aliyunListRecords(ak, sk, zoneName);
+      const updated = updatedRecords.find((r) => r.id === recordId);
+      if (!updated) return notFound(c, "Record not found after update");
+      return ok(c, normalizeAliyun(updated));
+    }
+
     return error(c, `Unsupported provider type: ${provider.type}`, 400);
   } catch {
     return error(c, "Failed to update record", 502);
@@ -480,6 +584,15 @@ zones.delete("/:zoneId/records/:recordId", async (c) => {
       return ok(c, { deleted: true });
     }
 
+    if (provider.type === "aliyun") {
+      await aliyunDeleteRecord(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        recordId
+      );
+      return ok(c, { deleted: true });
+    }
+
     return error(c, `Unsupported provider type: ${provider.type}`, 400);
   } catch {
     return error(c, "Failed to delete record", 502);
@@ -518,6 +631,13 @@ zones.get("/:zoneId/export", async (c) => {
         zoneName
       );
       records = dpRecords.map(normalizeDp);
+    } else if (provider.type === "aliyun") {
+      const aliyunRecords = await aliyunListRecords(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      records = aliyunRecords.map(normalizeAliyun);
     } else {
       return error(c, `Unsupported provider type: ${provider.type}`, 400);
     }
@@ -599,6 +719,13 @@ zones.post("/:zoneId/import", async (c) => {
         zoneName
       );
       existing = dpRecords.map(normalizeDp);
+    } else if (provider.type === "aliyun") {
+      const aliyunRecords = await aliyunListRecords(
+        provider.apiAccessKey ?? "",
+        provider.apiSecretKey ?? "",
+        zoneName
+      );
+      existing = aliyunRecords.map(normalizeAliyun);
     }
   } catch {
     // If we can't fetch existing records, fall back to append-only
@@ -757,6 +884,19 @@ async function createNewRecord(
       mx: rec.priority,
       weight: rec.weight,
     });
+  } else if (provider.type === "aliyun") {
+    const ak = provider.apiAccessKey ?? "";
+    const sk = provider.apiSecretKey ?? "";
+    const aliyunTtl = Math.max(rec.ttl || 600, 600);
+    await aliyunCreateRecord(ak, sk, zoneName, {
+      name: rec.name,
+      type: rec.type,
+      content: rec.content,
+      line: rec.line,
+      ttl: aliyunTtl,
+      mx: rec.priority,
+      weight: rec.weight,
+    });
   } else {
     throw new Error(`Unsupported provider type: ${provider.type}`);
   }
@@ -828,6 +968,24 @@ async function updateExistingRecord(
       line: resolvedLine,
       lineName,
       ttl: dpTtl,
+      mx: rec.priority ?? existing.mx,
+      weight: rec.weight ?? existing.weight,
+    });
+  } else if (provider.type === "aliyun") {
+    const ak = provider.apiAccessKey ?? "";
+    const sk = provider.apiSecretKey ?? "";
+
+    const existingRecords = await aliyunListRecords(ak, sk, zoneName);
+    const existing = existingRecords.find((r) => r.id === recordId);
+    if (!existing) throw new Error("Record not found");
+
+    const aliyunTtl = Math.max(rec.ttl ?? (existing.ttl || 600), 600);
+    await aliyunUpdateRecord(ak, sk, recordId, {
+      name: rec.name ?? existing.name,
+      type: rec.type ?? existing.type,
+      content: rec.content ?? existing.content,
+      line: rec.line ?? existing.line,
+      ttl: aliyunTtl,
       mx: rec.priority ?? existing.mx,
       weight: rec.weight ?? existing.weight,
     });

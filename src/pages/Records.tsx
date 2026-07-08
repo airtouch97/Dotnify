@@ -215,7 +215,7 @@ export function Records() {
     "cloudflare") as ProviderType;
   const zoneName = state?.zoneName ?? fallbackZone?.name ?? "";
   const showProxied = providerType === "cloudflare";
-  const showLine = providerType === "huawei" || providerType === "dnspod";
+  const showLine = providerType === "huawei" || providerType === "dnspod" || providerType === "aliyun";
 
   useEffect(() => {
     document.title = zoneName
@@ -223,10 +223,10 @@ export function Records() {
       : `${t("title.records")} | Dotnify`;
   }, [zoneName, t]);
 
-  // DNSPod line data for display in the table
+  // DNSPod / Aliyun line data for display in the table
   const dpLinesPath =
-    providerType === "dnspod" && zoneId && providerId
-      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
+    (providerType === "dnspod" || providerType === "aliyun") && zoneId && providerId
+      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=${providerType}&zoneName=${encodeURIComponent(zoneName)}`
       : null;
   const { data: dpLinesData } =
     useFetch<{ lineId: string; name: string }[]>(dpLinesPath);
@@ -240,6 +240,9 @@ export function Records() {
     if (providerType === "dnspod") {
       const name = dpLineNameMap.get(lineId) ?? lineId;
       return lang === "zh-CN" ? (DP_LINE_ZH[name] ?? name) : name;
+    }
+    if (providerType === "aliyun") {
+      return dpLineNameMap.get(lineId) ?? lineId;
     }
     return getLineName(lineId);
   }
@@ -539,21 +542,21 @@ function RecordForm({
   const { t, lang } = useLang();
   const isEdit = !!record;
   const showProxied = providerType === "cloudflare";
-  const showLine = providerType === "huawei" || providerType === "dnspod";
+  const showLine = providerType === "huawei" || providerType === "dnspod" || providerType === "aliyun";
 
-  // DNSPod line data (fetched from API)
+  // DNSPod / Aliyun line data (fetched from API)
   const dpLinesPath =
-    providerType === "dnspod" && zoneId && providerId
-      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=dnspod&zoneName=${encodeURIComponent(zoneName)}`
+    (providerType === "dnspod" || providerType === "aliyun") && zoneId && providerId
+      ? `/api/zones/${zoneId}/lines?providerId=${providerId}&providerType=${providerType}&zoneName=${encodeURIComponent(zoneName)}`
       : null;
   const { data: dpLinesData } =
     useFetch<{ lineId: string; name: string; parent: string | null }[]>(
       dpLinesPath,
     );
 
-  // Build DNSPod line lookup maps
+  // Build DNSPod / Aliyun line lookup maps
   const dpLineMap = useMemo(() => {
-    if (providerType !== "dnspod" || !dpLinesData)
+    if ((providerType !== "dnspod" && providerType !== "aliyun") || !dpLinesData)
       return {
         byId: new Map<string, string>(),
         children: new Map<string | null, string[]>(),
@@ -568,8 +571,8 @@ function RecordForm({
     return { byId, children };
   }, [providerType, dpLinesData]);
 
-  // DNSPod line state
-  const [dpLineId, setDpLineId] = useState<string>(record?.line ?? "0");
+  // DNSPod / Aliyun line state
+  const [dpLineId, setDpLineId] = useState<string>(record?.line ?? (providerType === "aliyun" ? "default" : "0"));
 
   // Cascading line state
   const [lineCategory, setLineCategory] = useState<string>(() => {
@@ -589,9 +592,9 @@ function RecordForm({
     return resolveLineToLevels(record.line)[3];
   });
 
-  // Derive the final line ID from the cascade (Huawei) or directly (DNSPod)
+  // Derive the final line ID from the cascade (Huawei) or directly (DNSPod/Aliyun)
   const line = useMemo(() => {
-    if (providerType === "dnspod") return dpLineId;
+    if (providerType === "dnspod" || providerType === "aliyun") return dpLineId;
     if (lineCategory === "default") return "default_view";
     if (lineL4) return lineL4;
     if (lineL3) return lineL3;
@@ -622,7 +625,7 @@ function RecordForm({
   const [name, setName] = useState(record?.name ?? "");
   const [content, setContent] = useState(record?.content ?? "");
   const [ttl, setTtl] = useState<number>(
-    record?.ttl ?? (providerType === "dnspod" ? 600 : 1),
+    record?.ttl ?? (providerType === "dnspod" || providerType === "aliyun" ? 600 : 1),
   );
   const [proxied, setProxied] = useState<boolean>(record?.proxied ?? false);
 
@@ -689,7 +692,7 @@ function RecordForm({
       type,
       name,
       content,
-      ttl: providerType === "dnspod" && ttl < 600 ? 600 : ttl,
+      ttl: (providerType === "dnspod" || providerType === "aliyun") && ttl < 600 ? 600 : ttl,
     };
     if (showProxied) body.proxied = proxied;
     if (showLine) body.line = line;
@@ -797,6 +800,23 @@ function RecordForm({
           />
         )}
         {showLine && providerType === "dnspod" && (
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t("records.line")}
+            </label>
+            <DnsLineSelector
+              lineId={dpLineId}
+              lines={dpLinesData ?? []}
+              lineMap={dpLineMap}
+              onChange={(id) => {
+                setDpLineId(id);
+                trackDirty();
+              }}
+              lang={lang}
+            />
+          </div>
+        )}
+        {showLine && providerType === "aliyun" && (
           <div className="flex flex-col gap-1 md:col-span-2">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
               {t("records.line")}

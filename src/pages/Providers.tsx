@@ -103,6 +103,12 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
         return;
       }
     }
+    if (providerType === "aliyun") {
+      if (!apiAccessKey.trim() || !apiSecretKey.trim()) {
+        setError(t("providers.akSkRequired"));
+        return;
+      }
+    }
 
     setBusy(true);
     try {
@@ -114,6 +120,9 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
         body.apiSecretKey = apiSecretKey.trim();
         if (region) body.region = region;
       } else if (providerType === "dnspod") {
+        body.apiAccessKey = apiAccessKey.trim();
+        body.apiSecretKey = apiSecretKey.trim();
+      } else if (providerType === "aliyun") {
         body.apiAccessKey = apiAccessKey.trim();
         body.apiSecretKey = apiSecretKey.trim();
       }
@@ -157,6 +166,9 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
         body.apiSecretKey = apiSecretKey.trim();
         if (region) body.region = region;
       } else if (providerType === "dnspod") {
+        body.apiAccessKey = apiAccessKey.trim();
+        body.apiSecretKey = apiSecretKey.trim();
+      } else if (providerType === "aliyun") {
         body.apiAccessKey = apiAccessKey.trim();
         body.apiSecretKey = apiSecretKey.trim();
       }
@@ -207,7 +219,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
   }
 
   return (
-    <Card title={providerType === "huawei" ? t("providers.addHuawei") : providerType === "dnspod" ? t("providers.addDnspod") : t("providers.addCloudflare")}>
+    <Card title={providerType === "huawei" ? t("providers.addHuawei") : providerType === "dnspod" ? t("providers.addDnspod") : providerType === "aliyun" ? t("providers.addAliyun") : t("providers.addCloudflare")}>
       <form onSubmit={verifyAndFetchZones} className="flex flex-col gap-4">
         <Select
           label={t("providers.providerType")}
@@ -217,6 +229,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
             { value: "cloudflare", label: "Cloudflare" },
             { value: "huawei", label: t("providers.huaweiCloud") },
             { value: "dnspod", label: "DNSPod" },
+            { value: "aliyun", label: t("providers.aliyunCloud") },
           ]}
         />
         <Input
@@ -224,7 +237,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={providerType === "cloudflare" ? t("providers.placeholderCloudflare") : providerType === "dnspod" ? t("providers.placeholderDnspod") : t("providers.placeholderHuawei")}
+          placeholder={providerType === "cloudflare" ? t("providers.placeholderCloudflare") : providerType === "dnspod" ? t("providers.placeholderDnspod") : providerType === "aliyun" ? t("providers.placeholderAliyun") : t("providers.placeholderHuawei")}
           required
           hint={t("providers.nameHint")}
         />
@@ -261,6 +274,30 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
               placeholder="Tencent Cloud SecretKey"
               required
               hint={t("providers.dpSkHint")}
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+          </>
+        ) : providerType === "aliyun" ? (
+          <>
+            <Input
+              label={t("providers.accessKeyId")}
+              name="apiAccessKey"
+              type="password"
+              value={apiAccessKey}
+              onChange={(e) => setApiAccessKey(e.target.value)}
+              placeholder="Alibaba Cloud AccessKey ID"
+              required
+              hint={t("providers.aliAkHint")}
+            />
+            <Input
+              label={t("providers.secretAccessKey")}
+              name="apiSecretKey"
+              type="password"
+              value={apiSecretKey}
+              onChange={(e) => setApiSecretKey(e.target.value)}
+              placeholder="Alibaba Cloud AccessKey Secret"
+              required
+              hint={t("providers.aliSkHint")}
             />
             {error && <p className="text-xs text-red-600">{error}</p>}
           </>
@@ -364,7 +401,7 @@ function ProviderRow({ provider, onChanged }: { provider: Provider; onChanged: (
                   <dt className="inline">{t("providers.token")}:</dt>{" "}
                   <dd className="inline font-mono text-slate-700 dark:text-slate-300">{provider.apiKey}</dd>
                 </div>
-              ) : provider.type === "dnspod" ? (
+              ) : provider.type === "dnspod" || provider.type === "aliyun" ? (
                 <div>
                   <dt className="inline">{t("providers.ak")}:</dt>{" "}
                   <dd className="inline font-mono text-slate-700 dark:text-slate-300">{provider.apiAccessKey}</dd>
@@ -449,6 +486,10 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
         if (apiAccessKey.trim()) body.apiAccessKey = apiAccessKey.trim();
         if (apiSecretKey.trim()) body.apiSecretKey = apiSecretKey.trim();
       }
+      if (provider.type === "aliyun") {
+        if (apiAccessKey.trim()) body.apiAccessKey = apiAccessKey.trim();
+        if (apiSecretKey.trim()) body.apiSecretKey = apiSecretKey.trim();
+      }
       await apiFetch(`/api/providers/${provider.id}`, {
         method: "PATCH",
         body,
@@ -493,6 +534,25 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
             />
             <Input
               label={t("providers.secretKey")}
+              name="apiSecretKey"
+              type="password"
+              value={apiSecretKey}
+              onChange={(e) => setApiSecretKey(e.target.value)}
+              placeholder={t("providers.leaveBlankKey")}
+            />
+          </>
+        ) : provider.type === "aliyun" ? (
+          <>
+            <Input
+              label={t("providers.accessKeyId")}
+              name="apiAccessKey"
+              type="password"
+              value={apiAccessKey}
+              onChange={(e) => setApiAccessKey(e.target.value)}
+              placeholder={t("providers.leaveBlankKey")}
+            />
+            <Input
+              label={t("providers.secretAccessKey")}
               name="apiSecretKey"
               type="password"
               value={apiSecretKey}

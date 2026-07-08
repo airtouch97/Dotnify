@@ -14,7 +14,7 @@ export interface SetupResponse {
   createdAt: string;
 }
 
-export type ProviderType = "cloudflare" | "huawei" | "dnspod";
+export type ProviderType = "cloudflare" | "huawei" | "dnspod" | "aliyun";
 
 export interface Provider {
   id: string;
