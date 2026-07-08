@@ -14,7 +14,7 @@ export interface Session {
   createdAt: string; // ISO timestamp
 }
 
-export type ProviderType = "cloudflare" | "huawei" | "dnspod";
+export type ProviderType = "cloudflare" | "huawei" | "dnspod" | "aliyun";
 
 export interface Provider {
   id: string;
