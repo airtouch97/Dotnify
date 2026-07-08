@@ -310,8 +310,7 @@ zones.get("/:zoneId/records", async (c) => {
     }
 
     return error(c, `Unsupported provider type: ${provider.type}`, 400);
-  } catch (err) {
-    console.error("[aliyun] Failed to fetch records:", err);
+  } catch {
     return error(c, "Failed to fetch records", 502);
   }
 });

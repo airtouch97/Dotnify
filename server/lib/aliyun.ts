@@ -104,7 +104,6 @@ async function aliyunFetch<T>(
   });
 
   const text = await res.text();
-  console.error(`[aliyun] ${method} ${action} → ${res.status}`, text.slice(0, 500));
   let json: Record<string, unknown> | null = null;
   try {
     json = JSON.parse(text);
@@ -166,7 +165,7 @@ export interface AliyunLine {
  */
 export async function listZones(accessKeyId: string, accessKeySecret: string): Promise<AliyunZone[]> {
   const resp = await aliyunFetch<{
-    Domains?: { Domain?: { DomainId?: string; DomainName?: string; RecordCount?: number; DnsStatus?: string }[] };
+    Domains?: { Domain?: { DomainId?: string; DomainName?: string; RecordCount?: number }[] };
     TotalCount?: number;
   }>(accessKeyId, accessKeySecret, "DescribeDomains", {
     params: { PageNumber: 1, PageSize: 50 },
@@ -175,7 +174,8 @@ export async function listZones(accessKeyId: string, accessKeySecret: string): P
   return (resp.Domains?.Domain ?? []).map((d) => ({
     id: d.DomainId ?? "",
     name: d.DomainName ?? "",
-    status: d.DnsStatus === "ENABLE" ? "active" : (d.DnsStatus ?? ""),
+    // Alidns DescribeDomains has no status field; if listed, it's active
+    status: "active",
     recordCount: d.RecordCount ?? 0,
   }));
 }
