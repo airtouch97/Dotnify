@@ -228,7 +228,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
           options={[
             { value: "cloudflare", label: "Cloudflare" },
             { value: "huawei", label: t("providers.huaweiCloud") },
-            { value: "dnspod", label: "DNSPod" },
+            { value: "dnspod", label: t("providers.tencentCloud") },
             { value: "aliyun", label: t("providers.aliyunCloud") },
           ]}
         />

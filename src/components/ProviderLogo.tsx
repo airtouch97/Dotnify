@@ -4,7 +4,7 @@ import { CloudflareLogo, HuaweiCloudLogo, DnspodLogo, AliyunCloudLogo } from "@/
 const LABELS: Record<ProviderType, string> = {
   cloudflare: "Cloudflare",
   huawei: "Huawei Cloud",
-  dnspod: "DNSPod",
+  dnspod: "Tencent Cloud",
   aliyun: "Alibaba Cloud",
 };
 
