@@ -394,12 +394,13 @@ zones.post("/:zoneId/records", async (c) => {
     if (provider.type === "aliyun") {
       const ak = provider.apiAccessKey ?? "";
       const sk = provider.apiSecretKey ?? "";
+      const aliyunTtl = Math.max(Number(body.ttl) || 600, 600);
       const r = await aliyunCreateRecord(ak, sk, zoneName, {
         name: body.name,
         type: body.type,
         content: body.content,
         line: body.line,
-        ttl: body.ttl ?? 600,
+        ttl: aliyunTtl,
         mx: body.priority,
         weight: body.weight,
       });
@@ -517,12 +518,13 @@ zones.patch("/:zoneId/records/:recordId", async (c) => {
       const existing = existingRecords.find((r) => r.id === recordId);
       if (!existing) return notFound(c, "Record not found");
 
+      const aliyunTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
       await aliyunUpdateRecord(ak, sk, recordId, {
         name: body.name ?? existing.name,
         type: body.type ?? existing.type,
         content: body.content ?? existing.content,
         line: body.line ?? existing.line,
-        ttl: body.ttl ?? existing.ttl,
+        ttl: aliyunTtl,
         mx: body.priority ?? existing.mx,
         weight: body.weight ?? existing.weight,
       });
@@ -885,12 +887,13 @@ async function createNewRecord(
   } else if (provider.type === "aliyun") {
     const ak = provider.apiAccessKey ?? "";
     const sk = provider.apiSecretKey ?? "";
+    const aliyunTtl = Math.max(rec.ttl || 600, 600);
     await aliyunCreateRecord(ak, sk, zoneName, {
       name: rec.name,
       type: rec.type,
       content: rec.content,
       line: rec.line,
-      ttl: rec.ttl ?? 600,
+      ttl: aliyunTtl,
       mx: rec.priority,
       weight: rec.weight,
     });
@@ -976,12 +979,13 @@ async function updateExistingRecord(
     const existing = existingRecords.find((r) => r.id === recordId);
     if (!existing) throw new Error("Record not found");
 
+    const aliyunTtl = Math.max(rec.ttl ?? (existing.ttl || 600), 600);
     await aliyunUpdateRecord(ak, sk, recordId, {
       name: rec.name ?? existing.name,
       type: rec.type ?? existing.type,
       content: rec.content ?? existing.content,
       line: rec.line ?? existing.line,
-      ttl: rec.ttl ?? existing.ttl,
+      ttl: aliyunTtl,
       mx: rec.priority ?? existing.mx,
       weight: rec.weight ?? existing.weight,
     });

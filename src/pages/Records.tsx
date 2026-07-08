@@ -625,7 +625,7 @@ function RecordForm({
   const [name, setName] = useState(record?.name ?? "");
   const [content, setContent] = useState(record?.content ?? "");
   const [ttl, setTtl] = useState<number>(
-    record?.ttl ?? (providerType === "dnspod" ? 600 : 1),
+    record?.ttl ?? (providerType === "dnspod" || providerType === "aliyun" ? 600 : 1),
   );
   const [proxied, setProxied] = useState<boolean>(record?.proxied ?? false);
 
@@ -692,7 +692,7 @@ function RecordForm({
       type,
       name,
       content,
-      ttl: providerType === "dnspod" && ttl < 600 ? 600 : ttl,
+      ttl: (providerType === "dnspod" || providerType === "aliyun") && ttl < 600 ? 600 : ttl,
     };
     if (showProxied) body.proxied = proxied;
     if (showLine) body.line = line;
