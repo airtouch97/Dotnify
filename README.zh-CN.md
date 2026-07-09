@@ -31,6 +31,7 @@
 │   ├── start.ts                   # 服务器入口（dotenv + serve）
 │   ├── lib/
 │   │   ├── auth.ts                # 密码哈希（scrypt）、会话管理
+│   │   ├── aliyun.ts              # 阿里云 DNS 客户端（REST + AK/SK HMAC-SHA1 签名）
 │   │   ├── cloudflare.ts          # Cloudflare API 客户端（REST + Bearer Token）
 │   │   ├── huawei.ts              # 华为云 DNS 客户端（REST + AK/SK HMAC-SHA256 签名）
 │   │   ├── huawei-line.ts         # 华为云解析线路数据加载

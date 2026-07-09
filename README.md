@@ -31,6 +31,7 @@ English | [简体中文](./README.zh-CN.md)
 │   ├── start.ts                   # Server entry point (dotenv + serve)
 │   ├── lib/
 │   │   ├── auth.ts                # Password hashing (scrypt), session management
+│   │   ├── aliyun.ts              # Alibaba Cloud DNS client (REST + AK/SK HMAC-SHA1 signing)
 │   │   ├── cloudflare.ts          # Cloudflare API client (REST + Bearer token)
 │   │   ├── huawei.ts              # Huawei Cloud DNS client (REST + AK/SK HMAC-SHA256 signing)
 │   │   ├── huawei-line.ts         # Huawei Cloud resolution line data loader
