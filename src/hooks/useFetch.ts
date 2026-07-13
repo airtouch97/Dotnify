@@ -114,17 +114,24 @@ export function useFetch<T>(path: string | null, opts: { cacheTtl?: number; deps
       isValidating: true,
     }));
     try {
-      const data = await apiFetch<T>(path, { allow401: true });
+      const data = await apiFetch<T>(path);
       if (reqId === reqIdRef.current) {
         memCache.set(path, data);
         if (cacheTtl > 0) lsSet(path, data);
         setState({ data, loading: false, error: null, isValidating: false });
       }
     } catch (e) {
-      if (reqId === reqIdRef.current) {
-        const msg = e instanceof ApiError ? e.message : "Failed to load";
-        setState((s) => ({ ...s, loading: false, error: msg, isValidating: false }));
+      if (reqId !== reqIdRef.current) return;
+      // A 401 means the session expired: apiFetch already cleared the token
+      // and kicked off a redirect to /login. Don't surface it as a load error
+      // (which would otherwise leave the user staring at an "Unauthorized"
+      // message instead of the login page).
+      if (e instanceof ApiError && e.status === 401) {
+        setState((s) => ({ ...s, loading: false, isValidating: false }));
+        return;
       }
+      const msg = e instanceof ApiError ? e.message : "Failed to load";
+      setState((s) => ({ ...s, loading: false, error: msg, isValidating: false }));
     }
   }
 
