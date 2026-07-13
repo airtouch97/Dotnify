@@ -10,6 +10,7 @@ import type {
   ZoneWithProvider,
 } from "@/lib/types";
 import { Card } from "@/components/Card";
+import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Toggle } from "@/components/Toggle";
@@ -722,7 +723,7 @@ function RecordForm({
   }
 
   return (
-    <Card title={isEdit ? t("records.editRecord") : t("records.createRecord")}>
+    <Modal open size="max-w-2xl" title={isEdit ? t("records.editRecord") : t("records.createRecord")} onClose={handleCancel}>
       <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Select
           label={t("records.type")}
@@ -969,7 +970,7 @@ function RecordForm({
           </div>
         </div>
       </form>
-    </Card>
+    </Modal>
   );
 }
 

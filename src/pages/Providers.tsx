@@ -4,6 +4,7 @@ import { useFetch, invalidate } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { Provider, ProviderType, Zone } from "@/lib/types";
 import { Card } from "@/components/Card";
+import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
@@ -186,7 +187,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
 
   if (step === "select") {
     return (
-      <Card title={t("providers.selectZones")} description={t("providers.selectZonesDesc")}>
+      <Modal open title={t("providers.selectZones")} description={t("providers.selectZonesDesc")} onClose={onCancel}>
         {zones.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t("providers.noAccessibleZones")}</p>
         ) : (
@@ -214,12 +215,12 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
             {selected.size === 0 ? t("providers.saveAllZones") : t("providers.saveCount", { count: selected.size })}
           </Button>
         </div>
-      </Card>
+      </Modal>
     );
   }
 
   return (
-    <Card title={providerType === "huawei" ? t("providers.addHuawei") : providerType === "dnspod" ? t("providers.addDnspod") : providerType === "aliyun" ? t("providers.addAliyun") : t("providers.addCloudflare")}>
+    <Modal open title={providerType === "huawei" ? t("providers.addHuawei") : providerType === "dnspod" ? t("providers.addDnspod") : providerType === "aliyun" ? t("providers.addAliyun") : t("providers.addCloudflare")} onClose={onCancel}>
       <form onSubmit={verifyAndFetchZones} className="flex flex-col gap-4">
         <Select
           label={t("providers.providerType")}
@@ -347,7 +348,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
           <Button type="submit" loading={busy}>{t("providers.verifyContinue")}</Button>
         </div>
       </form>
-    </Card>
+    </Modal>
   );
 }
 
@@ -503,7 +504,7 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
   }
 
   return (
-    <Card title={t("providers.editTitle", { name: provider.name })}>
+    <Modal open title={t("providers.editTitle", { name: provider.name })} onClose={onCancel}>
       <form onSubmit={save} className="flex flex-col gap-4">
         <Input
           label={t("providers.displayName")}
@@ -601,6 +602,6 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
           <Button type="submit" loading={busy}>{t("providers.save")}</Button>
         </div>
       </form>
-    </Card>
+    </Modal>
   );
 }

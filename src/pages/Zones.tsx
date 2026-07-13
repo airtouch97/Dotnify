@@ -5,6 +5,7 @@ import { useFetch, invalidate } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { Provider, Zone, ZoneWithProvider } from "@/lib/types";
 import { Card } from "@/components/Card";
+import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ProviderLogo } from "@/components/ProviderLogo";
@@ -196,7 +197,7 @@ function AddDomainForm({ managedZones, onSaved, onCancel }: { managedZones: Zone
 
   if (step === "select-zones") {
     return (
-      <Card title={t("zones.selectDomains")} description={t("zones.selectDomainsDesc", { provider: selectedProvider?.name ?? "this provider" })}>
+      <Modal open title={t("zones.selectDomains")} description={t("zones.selectDomainsDesc", { provider: selectedProvider?.name ?? "this provider" })} onClose={onCancel}>
         {unmanagedZones.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t("zones.allManaged")}</p>
         ) : (
@@ -224,12 +225,12 @@ function AddDomainForm({ managedZones, onSaved, onCancel }: { managedZones: Zone
             {selected.size === 0 ? t("zones.selectToAdd") : t("zones.addCount", { count: selected.size })}
           </Button>
         </div>
-      </Card>
+      </Modal>
     );
   }
 
   return (
-    <Card title={t("zones.addDomainTitle")} description={t("zones.addDomainDesc")}>
+    <Modal open title={t("zones.addDomainTitle")} description={t("zones.addDomainDesc")} onClose={onCancel}>
       {!providers || providers.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t("zones.noProviders")}</p>
       ) : (
@@ -259,7 +260,7 @@ function AddDomainForm({ managedZones, onSaved, onCancel }: { managedZones: Zone
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={busy}>{t("zones.cancel")}</Button>
       </div>
-    </Card>
+    </Modal>
   );
 }
 
