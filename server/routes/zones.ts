@@ -747,6 +747,10 @@ zones.post("/:zoneId/import", async (c) => {
   let skipped = 0;
   let updated = 0;
   const importErrors: string[] = [...result.errors];
+  // Existing record IDs already claimed by an earlier imported record in this
+  // batch, so multiple imports of the same name+type map to distinct existing
+  // records instead of all overwriting the same one.
+  const consumed = new Set<string>();
 
   for (const rec of result.records) {
     const nameTypeKey = `${rec.name}:${rec.type}`;
@@ -762,12 +766,33 @@ zones.post("/:zoneId/import", async (c) => {
     }
 
     if (strategy === "overwrite" && existingNameTypeKeys.has(nameTypeKey)) {
-      // Find the existing record ID (match by normalized name + type + content for exact match,
-      // or by name + type for CNAME which must be unique)
-      const match = isCname
-        ? existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type)
-        : existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type && r.content === rec.content);
+      // Overwrite matches by name+type (per the strategy's description).
+      // Prefer an exact content match so re-importing identical records
+      // refreshes in place instead of duplicating.
+      //
+      // Huawei Cloud groups multiple values into one record set (one ID, e.g.
+      // round-robin A records share a set). Updating such a set with a single
+      // imported value would discard the others, so for Huawei we only
+      // overwrite on an exact content match (a safe refresh) and let
+      // non-matching imports fall through to create (Huawei rejects duplicate
+      // name+type+line, so the existing set is preserved). Other providers
+      // store each value as its own record, so the name+type fallback is safe.
+      const match =
+        existing.find((r) =>
+          !consumed.has(r.id) &&
+          normalizeRecordName(r.name, zoneName) === rec.name &&
+          r.type === rec.type &&
+          r.content === rec.content
+        ) ??
+        (provider.type !== "huawei"
+          ? existing.find((r) =>
+              !consumed.has(r.id) &&
+              normalizeRecordName(r.name, zoneName) === rec.name &&
+              r.type === rec.type
+            )
+          : undefined);
       if (match) {
+        consumed.add(match.id);
         try {
           await updateExistingRecord(provider, zoneId, zoneName, match.id, rec);
           updated++;
@@ -779,7 +804,7 @@ zones.post("/:zoneId/import", async (c) => {
       }
     }
 
-    // append or overwrite-with-no-match: create new
+    // append, or overwrite with no existing name+type match: create new
     try {
       await createNewRecord(provider, zoneId, zoneName, rec);
       created++;
