@@ -68,3 +68,53 @@ export interface DnsRecord {
   status?: string; // DNSPod: "enable" | "disable"
   weight?: number; // DNSPod: record weight
 }
+
+/** Entry in the named server IP table. */
+export interface ServerEntry {
+  id: string;
+  name: string;
+  ip: string;
+  ipVersion: 4 | 6;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of GET /api/servers/:id/bindings?domain=... (one domain). */
+export interface ServerBindings {
+  server?: { name: string; ip: string };
+  domain: string;
+  zoneId: string;
+  provider: string;
+  providerType: ProviderType;
+  bindings: {
+    hostname: string;
+    type: RecordType;
+    content: string;
+    ttl: number;
+    recordId: string;
+    line?: string;
+    proxied?: boolean;
+  }[];
+}
+
+/** Result of GET /api/zones/:zoneId/address-records. */
+export interface AddressRecordsResponse {
+  zoneName: string;
+  records: { id: string; type: "A" | "AAAA"; hostname: string; ip: string; ttl: number; vercel: boolean }[];
+  vercelCnames: number;
+}
+
+/** MCP access token as listed by GET /api/mcp-tokens (never includes the secret). */
+export interface McpToken {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface McpTokensResponse {
+  tokens: McpToken[];
+  envTokenConfigured: boolean;
+}

@@ -21,7 +21,10 @@ export function Layout() {
   const NAV = [
     { to: "/", label: t("nav.home"), end: true },
     { to: "/domains", label: t("nav.domains") },
+    { to: "/servers", label: t("nav.servers") },
+    { to: "/ips", label: t("nav.ips") },
     { to: "/providers", label: t("nav.providers") },
+    { to: "/mcp", label: t("nav.mcp") },
   ];
 
   async function handleLogout() {

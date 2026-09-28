@@ -21,6 +21,8 @@ English | [简体中文](./README.zh-CN.md)
 - **Multi-provider** — Manage DNS records across all your providers in one place
 - **Full DNS CRUD** — Create, edit, and delete A/AAAA/CNAME/TXT/MX/NS/SRV records
 - **Password-protected** — Single admin account with scrypt-hashed credentials
+- **Server IP table & IP usage** — Name your server IPs, see which hostnames point to them, and find the most-used IPs across all domains ([docs](docs/servers-and-ip-usage.md))
+- **MCP endpoint** — Let AI assistants manage servers and bind them to hostnames via the Model Context Protocol, with per-client tokens ([docs](docs/mcp.md))
 - **Fast and lightweight** — Vite + React frontend, Hono backend, Upstash Redis for storage
 
 ## Project Structure
@@ -31,19 +33,28 @@ English | [简体中文](./README.zh-CN.md)
 │   ├── start.ts                   # Server entry point (dotenv + serve)
 │   ├── lib/
 │   │   ├── auth.ts                # Password hashing (scrypt), session management
+│   │   ├── binding.ts             # Bind/unbind servers to hostnames, find bindings
 │   │   ├── aliyun.ts              # Alibaba Cloud DNS client (REST + AK/SK HMAC-SHA1 signing)
 │   │   ├── cloudflare.ts          # Cloudflare API client (REST + Bearer token)
 │   │   ├── huawei.ts              # Huawei Cloud DNS client (REST + AK/SK HMAC-SHA256 signing)
 │   │   ├── huawei-line.ts         # Huawei Cloud resolution line data loader
 │   │   ├── dnspod.ts              # DNSPod (Tencent Cloud) client (REST + TC3-HMAC-SHA256 signing)
+│   │   ├── dns.ts                 # Provider-agnostic zone/record helpers (moved from routes/zones.ts)
+│   │   ├── mcp.ts                 # MCP server + tool definitions
+│   │   ├── mcp-tokens.ts          # MCP tokens (hash-only storage, verify, last used)
 │   │   ├── middleware.ts          # Auth middleware (Hono createMiddleware)
 │   │   ├── redis.ts               # Upstash Redis client + key definitions
 │   │   ├── response.ts            # JSON response helpers (ok, error, notFound, etc.)
+│   │   ├── servers.ts             # Named server IP table (Redis) + IP validation
+│   │   ├── vercel.ts              # Known Vercel edge IPs / CNAME targets (excluded on /ips)
 │   │   └── types.ts               # Shared backend types (Provider, DnsRecord, etc.)
 │   └── routes/
 │       ├── auth.ts                # /api/auth/* (me, login, logout, setup)
 │       ├── providers.ts           # /api/providers/* (CRUD, verify, zones)
-│       └── zones.ts               # /api/zones/* (list, lines, records CRUD)
+│       ├── zones.ts               # /api/zones/* (list, lines, records CRUD, address-records)
+│       ├── mcp.ts                 # /api/mcp (MCP Streamable HTTP endpoint, token auth)
+│       ├── mcp-tokens.ts          # /api/mcp-tokens (generate, list, revoke)
+│       └── servers.ts             # /api/servers/* (server IP table CRUD, bindings)
 ├── src/                           # Frontend (React + Vite)
 │   ├── components/                # Reusable UI components
 │   ├── hooks/                     # useAuth, useFetch (SWR-like with stale-while-revalidate)
@@ -53,6 +64,9 @@ English | [简体中文](./README.zh-CN.md)
 │   │   ├── Domains.tsx            # Domain list across all providers
 │   │   ├── Records.tsx            # DNS record table + create/edit forms
 │   │   ├── Providers.tsx          # Provider management (add, test, delete)
+│   │   ├── Servers.tsx            # Server IP table (add, edit, delete, bound hostnames)
+│   │   ├── IpUsage.tsx            # IP usage (per-domain scan, group by IP, name/rename inline)
+│   │   ├── McpAccess.tsx          # MCP tokens + ready-to-copy client configs
 │   │   ├── Login.tsx              # Login page
 │   │   └── Setup.tsx              # Initial admin setup
 │   ├── huawei_line.json           # Huawei Cloud resolution line data (static, ~300 entries)

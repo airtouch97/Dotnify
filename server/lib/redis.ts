@@ -27,4 +27,7 @@ export const KEYS = {
   admin: "dotnify:admin",
   session: (token: string) => `dotnify:session:${token}`,
   providers: "dotnify:providers",
+  servers: "dotnify:servers",
+  mcpTokens: "dotnify:mcp_tokens",
+  mcpTokenLastUsed: (id: string) => `dotnify:mcp_token_used:${id}`,
 } as const;

@@ -4,6 +4,9 @@ import { rateLimit } from "./lib/rate-limit.js";
 import auth from "./routes/auth.js";
 import providers from "./routes/providers.js";
 import zones from "./routes/zones.js";
+import servers from "./routes/servers.js";
+import mcp from "./routes/mcp.js";
+import mcpTokens from "./routes/mcp-tokens.js";
 
 const app = new Hono();
 
@@ -34,5 +37,8 @@ app.onError((err, c) => {
 app.route("/api/auth", auth);
 app.route("/api/providers", providers);
 app.route("/api/zones", zones);
+app.route("/api/servers", servers);
+app.route("/api/mcp", mcp);
+app.route("/api/mcp-tokens", mcpTokens);
 
 export default app;
