@@ -5,7 +5,6 @@ import { useLang } from "@/lib/i18n";
 import type { SetupResponse } from "@/lib/types";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
-import { Card } from "@/components/Card";
 
 export function Setup() {
   const { refresh } = useAuth();
@@ -45,13 +44,25 @@ export function Setup() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 bg-slate-50 dark:bg-slate-900">
-      <Card title={t("setup.title")} description={t("setup.description")}>
+    <div className="flex flex-1 items-center justify-center px-5 py-10 sm:py-16">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="relative mb-5">
+            <div aria-hidden="true" className="absolute inset-0 -z-10 scale-150 rounded-full bg-gradient-to-br from-brand-200 via-brand-300/60 to-transparent opacity-70 blur-2xl dark:from-brand-500/30 dark:via-brand-300/10" />
+            <img src="/favicon.png" alt="" className="h-16 w-16 drop-shadow-sm" />
+          </div>
+          <h1 className="text-[28px] font-bold leading-tight tracking-[-0.025em] text-slate-900 dark:text-white">{t("setup.title")}</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">{t("setup.description")}</p>
+        </div>
+        <div className="surface p-6 sm:p-8">
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Input
             label={t("setup.username")}
             name="username"
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="admin"
@@ -79,11 +90,12 @@ export function Setup() {
             required
             error={error}
           />
-          <Button type="submit" loading={busy}>
+          <Button type="submit" size="lg" loading={busy} className="mt-2 w-full">
             {t("setup.createAdmin")}
           </Button>
         </form>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

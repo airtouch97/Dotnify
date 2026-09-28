@@ -1,45 +1,35 @@
-import { useTheme } from "@/lib/theme";
+import { useTheme, type Theme } from "@/lib/theme";
+import { useLang } from "@/lib/i18n";
+import { Icon } from "./Icon";
+import { Segmented } from "./Segmented";
 
-export function AppearanceSwitch() {
-  const { resolved, setTheme } = useTheme();
-  const isDark = resolved === "dark";
-
-  function toggle() {
-    setTheme(isDark ? "light" : "dark");
-  }
-
+/** Light / Dark / Auto appearance picker. `compact` shows icons only. */
+export function AppearanceSwitch({ compact = false, className = "" }: { compact?: boolean; className?: string }) {
+  const { theme, setTheme } = useTheme();
+  const { t } = useLang();
+  const opts: { value: Theme; icon: "sun" | "moon" | "refresh"; label: string }[] = [
+    { value: "light", icon: "sun", label: t("appearance.light") },
+    { value: "dark", icon: "moon", label: t("appearance.dark") },
+    { value: "system", icon: "refresh", label: t("appearance.system") },
+  ];
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isDark}
-      title={isDark ? "Switch to light theme" : "Switch to dark theme"}
-      onClick={toggle}
-      className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
-      style={{ backgroundColor: isDark ? "var(--brand-600, #2563eb)" : "#cbd5e1" }}
-    >
-      <span className="relative inline-flex h-4 w-4 items-center justify-center transition-transform" style={{ transform: isDark ? "translateX(18px)" : "translateX(2px)" }}>
-        {/* Sun icon */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 1024 1024"
-          fill="currentColor"
-          className="absolute h-3 w-3 text-slate-700 transition-opacity"
-          style={{ opacity: isDark ? 0 : 1 }}
-        >
-          <path d="M512 864.711111q-96.711111 0-178.631111-48.924444-80.782222-46.648889-127.431111-127.431111-48.924444-81.92-48.924445-178.631112t48.924445-178.631111q46.648889-80.782222 127.431111-127.431111 81.92-48.924444 178.631111-48.924444t178.631111 48.924444q80.782222 46.648889 127.431111 127.431111 48.924444 81.92 48.924445 178.631111t-48.924445 178.631112q-46.648889 80.782222-127.431111 127.431111-81.92 48.924444-178.631111 48.924444z m0-72.817778q76.231111 0 141.084444-38.115555t102.968889-102.968889Q794.168889 585.955556 794.168889 509.724444t-38.115556-141.084444Q717.937778 303.786667 653.084444 265.671111T512 227.555556q-76.231111 0-141.084444 38.115555T267.946667 368.64Q229.831111 433.493333 229.831111 509.724444t38.115556 141.084445q38.115556 64.853333 102.968889 102.968889T512 791.893333z m0-791.893333q14.791111 0 25.6 10.808889T548.408889 36.408889v58.026667q0 14.791111-10.808889 25.6T512 130.844444q-14.791111 0-25.6-10.808888T475.591111 94.435556v-58.026667q0-14.791111 10.808889-25.6T512 0z m0 893.155556q14.791111 0 25.6 10.808888T548.408889 929.564444v58.026667q0 14.791111-10.808889 25.6T512 1024q-14.791111 0-25.6-10.808889T475.591111 987.591111v-58.026667q0-14.791111 10.808889-25.6T512 893.155556z m370.915556-12.515556q-10.24 10.24-25.6 10.24t-25.6-10.24l-40.96-40.96q-11.377778-10.24-11.377778-25.6t10.808889-26.168889q10.808889-10.808889 26.168889-10.808889t25.6 11.377778l40.96 40.96q10.24 10.24 10.24 25.6t-10.24 25.6zM236.657778 237.795556q-10.24 10.24-25.6 10.24t-25.6-10.24l-40.96-40.96q-11.377778-10.24-11.377778-25.6t10.808889-26.168889q10.808889-10.808889 26.168889-10.808889T195.697778 145.635556l40.96 40.96q10.24 10.24 10.24 25.6t-10.24 25.6z m638.293333-92.16q10.24 10.24 10.24 25.6t-10.24 25.6l-40.96 40.96q-10.24 10.24-25.6 10.24t-26.168889-10.24q-10.808889-10.24-10.808889-25.6T782.791111 186.595556l40.96-40.96q10.24-11.377778 25.6-11.377778T874.951111 145.635556zM233.244444 788.48q11.377778 10.24 11.377778 25.6T233.244444 839.68l-40.96 40.96q-10.24 10.24-25.6 10.24t-25.6-10.24q-10.24-10.24-10.24-25.6t10.24-25.6l40.96-40.96q10.24-11.377778 25.6-11.377778t25.6 11.377778z m788.48-278.755556q0 14.791111-10.808888 25.6T985.315556 546.133333h-58.026667q-14.791111 0-25.6-10.808889T890.88 509.724444q0-14.791111 10.808889-25.6T927.288889 473.315556h58.026667q14.791111 0 25.6 10.808888T1021.724444 509.724444z m-888.604444 0q0 14.791111-10.808889 25.6T96.711111 546.133333H38.684444q-14.791111 0-25.6-10.808889T2.275556 509.724444q0-14.791111 10.808888-25.6T38.684444 473.315556h58.026667q14.791111 0 25.6 10.808888T133.12 509.724444z" />
-        </svg>
-        {/* Moon icon */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 1024 1024"
-          fill="currentColor"
-          className="absolute h-3 w-3 text-slate-300 transition-opacity"
-          style={{ opacity: isDark ? 1 : 0 }}
-        >
-          <path d="M930.133333 520.533333c-12.8-17.066667-38.4-21.333333-59.733333-8.533333-115.2 85.333333-273.066667 59.733333-358.4-55.466667-34.133333-42.666667-51.2-98.133333-51.2-149.333333 0-55.466667 17.066667-106.666667 46.933333-153.6 12.8-21.333333 8.533333-46.933333-8.533333-59.733333-8.533333-8.533333-17.066667-8.533333-29.866667-8.533334-234.666667 21.333333-405.333333 230.4-384 465.066667s230.4 405.333333 465.066667 384c200.533333-21.333333 358.4-174.933333 384-375.466667 4.266667-12.8 4.266667-29.866667-4.266667-38.4z m-187.733333 243.2c-140.8 128-354.133333 119.466667-482.133333-21.333333s-119.466667-354.133333 21.333333-482.133333c34.133333-29.866667 72.533333-55.466667 115.2-68.266667-12.8 34.133333-21.333333 72.533333-21.333333 115.2 0 187.733333 153.6 341.333333 341.333333 341.333333 38.4 0 76.8-8.533333 115.2-21.333333-17.066667 51.2-51.2 98.133333-89.6 136.533333z" />
-        </svg>
-      </span>
-    </button>
+    <Segmented
+      ariaLabel={t("appearance.label")}
+      value={theme}
+      onChange={setTheme}
+      className={className}
+      options={opts.map((o) => ({
+        value: o.value,
+        title: o.label,
+        label: compact ? (
+          o.value === "system" ? <span className="text-[11px] font-semibold">A</span> : <Icon name={o.icon} size={15} />
+        ) : (
+          <>
+            {o.value !== "system" && <Icon name={o.icon} size={14} />}
+            <span>{o.label}</span>
+          </>
+        ),
+      }))}
+    />
   );
 }

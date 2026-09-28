@@ -9,6 +9,10 @@ import { Home } from "@/pages/Home";
 import { Providers } from "@/pages/Providers";
 import { Zones } from "@/pages/Zones";
 import { Records } from "@/pages/Records";
+import { Servers } from "@/pages/Servers";
+import { McpAccess } from "@/pages/McpAccess";
+import { IpUsage } from "@/pages/IpUsage";
+import { Changes } from "@/pages/Changes";
 import { Spinner } from "@/components/Spinner";
 
 /**
@@ -35,7 +39,7 @@ function useMe(): MeResponse | undefined {
 
 function SpinnerShell() {
   return (
-    <div className="grid h-screen place-items-center">
+    <div className="grid min-h-dvh place-items-center">
       <Spinner />
     </div>
   );
@@ -92,6 +96,10 @@ export const router = createBrowserRouter([
       { path: "login", element: <LoginGuard />, handle: { titleKey: "title.login" } },
       { path: "providers", element: <AuthGuard><Providers /></AuthGuard>, handle: { titleKey: "title.providers" } },
       { path: "domains", element: <AuthGuard><Zones /></AuthGuard>, handle: { titleKey: "title.domains" } },
+      { path: "servers", element: <AuthGuard><Servers /></AuthGuard>, handle: { titleKey: "title.servers" } },
+      { path: "ips", element: <AuthGuard><IpUsage /></AuthGuard>, handle: { titleKey: "title.ips" } },
+      { path: "mcp", element: <AuthGuard><McpAccess /></AuthGuard>, handle: { titleKey: "title.mcp" } },
+      { path: "changes", element: <AuthGuard><Changes /></AuthGuard>, handle: { titleKey: "title.changes" } },
       { path: "domains/:zoneId/records", element: <AuthGuard><Records /></AuthGuard>, handle: { titleKey: "" } },
       // Legacy redirect
       { path: "zones", element: <Navigate to="/domains" replace /> },

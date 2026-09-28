@@ -6,21 +6,23 @@ interface CardProps {
   actions?: ReactNode;
   children?: ReactNode;
   className?: string;
+  bodyClassName?: string;
 }
 
-export function Card({ title, description, actions, children, className = "" }: CardProps) {
+export function Card({ title, description, actions, children, className = "", bodyClassName }: CardProps) {
+  const flush = /\bp-0\b/.test(className);
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 ${className}`}>
+    <section className={`surface ${className}`}>
       {(title || actions) && (
-        <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
-          <div>
-            {title && <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>}
-            {description && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
+        <header className="flex flex-col gap-3 px-5 pb-1 pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-6">
+          <div className="min-w-0">
+            {title && <h2 className="text-[17px] font-semibold leading-snug text-slate-900 dark:text-slate-50">{title}</h2>}
+            {description && <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className="p-5">{children}</div>
+      <div className={bodyClassName ?? (flush ? "" : "p-5 sm:p-6")}>{children}</div>
     </section>
   );
 }

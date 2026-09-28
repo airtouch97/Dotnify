@@ -5,9 +5,12 @@ import { useLang } from "@/lib/i18n";
 import type { Provider, ProviderType, Zone } from "@/lib/types";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
-import { Spinner } from "@/components/Spinner";
+import { Input, inputClass } from "@/components/Input";
+import { SkeletonList } from "@/components/Skeleton";
+import { PageHeader } from "@/components/PageHeader";
+import { Icon } from "@/components/Icon";
+import { ErrorNote } from "@/components/ErrorNote";
 import { EmptyState } from "@/components/EmptyState";
 import { ProviderLogo } from "@/components/ProviderLogo";
 
@@ -29,33 +32,35 @@ export function Providers() {
   const [showForm, setShowForm] = useState(false);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t("providers.title")}</h1>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t("providers.subtitle")}</p>
-        </div>
-        <Button onClick={() => setShowForm((v) => !v)} variant={showForm ? "secondary" : "primary"}>
-          {showForm ? t("providers.cancel") : t("providers.addProvider")}
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={t("providers.title")}
+        subtitle={t("providers.subtitle")}
+        actions={
+          <Button onClick={() => setShowForm((v) => !v)} variant={showForm ? "secondary" : "primary"}>
+            {!showForm && <Icon name="plus" size={16} />}
+            {showForm ? t("providers.cancel") : t("providers.addProvider")}
+          </Button>
+        }
+      />
 
       {showForm && <AddForm onSaved={() => { invalidate("/api/zones"); setShowForm(false); void refetch(); }} onCancel={() => setShowForm(false)} />}
 
       {loading ? (
-        <Spinner label="Loading providers" />
+        <SkeletonList rows={2} />
       ) : error ? (
         <Card>
-          <p className="text-sm text-red-600">{error}</p>
+          <ErrorNote message={error} onRetry={() => void refetch()} retryLabel={t("common.retry")} />
         </Card>
       ) : !providers || providers.length === 0 ? (
         <EmptyState
+          icon={<Icon name="plug" size={26} />}
           title={t("providers.noProviders")}
           description={t("providers.noProvidersDesc")}
-          action={<Button onClick={() => setShowForm(true)}>{t("providers.addFirst")}</Button>}
+          action={<Button onClick={() => setShowForm(true)}><Icon name="plus" size={16} />{t("providers.addFirst")}</Button>}
         />
       ) : (
-        <ul className="space-y-3">
+        <ul className="stagger space-y-3">
           {providers.map((p) => (
             <ProviderRow key={p.id} provider={p} onChanged={() => { invalidate("/api/zones"); void refetch(); }} />
           ))}
@@ -193,22 +198,22 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
           <ul className="max-h-72 space-y-1 overflow-y-auto">
             {zones.map((z) => (
               <li key={z.id}>
-                <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700">
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.06]">
                   <input
                     type="checkbox"
                     checked={selected.has(z.id)}
                     onChange={() => toggleZone(z.id)}
-                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+                    className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500 dark:border-white/15"
                   />
                   <span className="font-mono text-sm text-slate-900 dark:text-slate-100">{z.name}</span>
-                  <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{z.status}</span>
+                  <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">{z.status}</span>
                 </label>
               </li>
             ))}
           </ul>
         )}
-        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        {error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={() => { setStep("input"); setError(null); }} disabled={busy}>{t("zones.back")}</Button>
           <Button onClick={save} loading={busy}>
             {selected.size === 0 ? t("providers.saveAllZones") : t("providers.saveCount", { count: selected.size })}
@@ -275,7 +280,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
               required
               hint={t("providers.dpSkHint")}
             />
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           </>
         ) : providerType === "aliyun" ? (
           <>
@@ -299,7 +304,7 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
               required
               hint={t("providers.aliSkHint")}
             />
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           </>
         ) : (
           <>
@@ -324,11 +329,11 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
               hint={t("providers.hwSkHint")}
             />
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("providers.region")}</label>
+              <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{t("providers.region")}</label>
               <select
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className={inputClass}
               >
                 <option value="">{t("providers.regionDefault")}</option>
                 {HW_REGIONS.map((r) => (
@@ -337,12 +342,12 @@ function AddForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => v
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{t("providers.regionHint")}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("providers.regionHint")}</p>
             </div>
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           </>
         )}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>{t("providers.cancel")}</Button>
           <Button type="submit" loading={busy}>{t("providers.verifyContinue")}</Button>
         </div>
@@ -388,14 +393,15 @@ function ProviderRow({ provider, onChanged }: { provider: Provider; onChanged: (
 
   return (
     <li>
-      <Card>
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+      <Card bodyClassName="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white shadow-xs ring-1 ring-black/[0.06] dark:bg-white/[0.08] dark:ring-white/[0.08]">
               <ProviderLogo type={provider.type} />
-              <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{provider.name}</h3>
-            </div>
-            <dl className="mt-1 flex flex-wrap gap-x-6 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+            </span>
+            <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-white">{provider.name}</h3>
+            <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
               {provider.type === "cloudflare" ? (
                 <div>
                   <dt className="inline">{t("providers.token")}:</dt>{" "}
@@ -427,23 +433,26 @@ function ProviderRow({ provider, onChanged }: { provider: Provider; onChanged: (
                 <dd className="inline">{new Date(provider.createdAt).toLocaleDateString()}</dd>
               </div>
             </dl>
-            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+            {error && <p role="alert" className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button variant="secondary" onClick={() => setEditing(true)} disabled={confirming}>
+          <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
+            <Button variant="secondary" size="sm" onClick={() => setEditing(true)} disabled={confirming}>
+              <Icon name="edit" size={14} />
               {t("providers.edit")}
             </Button>
             {confirming ? (
-              <>
-                <Button variant="danger" onClick={remove} loading={busy}>
+              <span className="flex animate-pop-in items-center gap-2">
+                <Button variant="danger" size="sm" onClick={remove} loading={busy}>
                   {t("providers.confirmDelete")}
                 </Button>
-                <Button variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+                <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={busy}>
                   {t("providers.cancel")}
                 </Button>
-              </>
+              </span>
             ) : (
-              <Button variant="ghost" onClick={() => setConfirming(true)} disabled={busy} className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30">
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} disabled={busy} className="!text-red-600 dark:text-red-400 hover:!bg-red-50 dark:!text-red-400 dark:hover:!bg-red-500/10">
+                <Icon name="trash" size={14} />
                 {t("providers.delete")}
               </Button>
             )}
@@ -579,11 +588,11 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
               placeholder={t("providers.leaveBlankKey")}
             />
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("providers.region")}</label>
+              <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{t("providers.region")}</label>
               <select
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className={inputClass}
               >
                 <option value="">{t("providers.regionDefault")}</option>
                 {HW_REGIONS.map((r) => (
@@ -595,8 +604,8 @@ function EditProviderForm({ provider, onSaved, onCancel }: { provider: Provider;
             </div>
           </>
         )}
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>{t("providers.cancel")}</Button>
           <Button type="submit" loading={busy}>{t("providers.save")}</Button>
         </div>

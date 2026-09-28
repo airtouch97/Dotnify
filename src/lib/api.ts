@@ -2,9 +2,12 @@ import { clearToken, getToken } from "./token";
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Parsed JSON error body (e.g. restore conflicts). */
+  payload?: unknown;
+  constructor(message: string, status: number, payload?: unknown) {
     super(message);
     this.status = status;
+    this.payload = payload;
     this.name = "ApiError";
   }
 }
@@ -70,7 +73,7 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
       (payload && typeof payload === "object" && "error" in payload
         ? String((payload as { error: unknown }).error)
         : `Request failed (${res.status})`) || `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, payload);
   }
 
   const data = (payload as { data?: T })?.data;

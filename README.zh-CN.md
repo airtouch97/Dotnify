@@ -21,6 +21,9 @@
 - **多供应商** — 统一管理所有 DNS 供应商的记录
 - **完整的 DNS CRUD** — 创建、编辑、删除 A/AAAA/CNAME/TXT/MX/NS/SRV 等记录
 - **密码保护** — 单管理员账户，密码使用 scrypt 哈希存储
+- **服务器 IP 表与 IP 使用情况** — 为服务器 IP 命名，查看哪些主机名解析到它，并找出所有域名中最常用的 IP（[文档](docs/servers-and-ip-usage.md)，英文）
+- **MCP 端点** — 让 AI 助手通过 Model Context Protocol 管理服务器并绑定到域名，每个客户端单独 Token（[文档](docs/mcp.md)，英文）
+- **变更记录与恢复** — 每次 DNS 变更（网页、API、导入、MCP）在执行前先备份前后快照，可在变更记录页查看并一键恢复（[文档](docs/dns-change-log.md)，英文）
 - **轻量快速** — Vite + React 前端，Hono 后端，Upstash Redis 存储
 
 ## 项目结构
@@ -31,19 +34,31 @@
 │   ├── start.ts                   # 服务器入口（dotenv + serve）
 │   ├── lib/
 │   │   ├── auth.ts                # 密码哈希（scrypt）、会话管理
+│   │   ├── binding.ts             # 绑定/解绑服务器与主机名、查询绑定
 │   │   ├── aliyun.ts              # 阿里云 DNS 客户端（REST + AK/SK HMAC-SHA1 签名）
 │   │   ├── cloudflare.ts          # Cloudflare API 客户端（REST + Bearer Token）
 │   │   ├── huawei.ts              # 华为云 DNS 客户端（REST + AK/SK HMAC-SHA256 签名）
 │   │   ├── huawei-line.ts         # 华为云解析线路数据加载
 │   │   ├── dnspod.ts              # DNSPod（腾讯云）客户端（REST + TC3-HMAC-SHA256 签名）
+│   │   ├── dns.ts                 # 与供应商无关的域名/记录辅助函数（从 routes/zones.ts 抽出）
+│   │   ├── mcp.ts                 # MCP 服务与工具定义
+│   │   ├── mcp-tokens.ts          # MCP Token（仅存哈希、校验、最近使用）
+│   │   ├── changelog.ts           # DNS 变更记录（先备份再修改）
+│   │   ├── restore.ts             # 恢复某次变更（冲突检测）
 │   │   ├── middleware.ts          # 鉴权中间件（Hono createMiddleware）
 │   │   ├── redis.ts               # Upstash Redis 客户端 + 键名定义
 │   │   ├── response.ts            # JSON 响应辅助（ok、error、notFound 等）
+│   │   ├── servers.ts             # 服务器 IP 表（Redis）+ IP 校验
+│   │   ├── vercel.ts              # Vercel 边缘 IP / CNAME 目标（/ips 中排除）
 │   │   └── types.ts               # 后端共享类型（Provider、DnsRecord 等）
 │   └── routes/
 │       ├── auth.ts                # /api/auth/*（me、login、logout、setup）
 │       ├── providers.ts           # /api/providers/*（CRUD、验证、zones）
-│       └── zones.ts               # /api/zones/*（列表、线路、记录 CRUD）
+│       ├── zones.ts               # /api/zones/*（列表、线路、记录 CRUD、address-records）
+│       ├── mcp.ts                 # /api/mcp（MCP Streamable HTTP 端点，Token 鉴权）
+│       ├── mcp-tokens.ts          # /api/mcp-tokens（生成、列表、吊销）
+│       ├── changes.ts             # /api/changes（列表、恢复）
+│       └── servers.ts             # /api/servers/*（服务器表 CRUD、已绑定主机名）
 ├── src/                           # 前端（React + Vite）
 │   ├── components/                # 可复用 UI 组件
 │   ├── hooks/                     # useAuth、useFetch（类 SWR，stale-while-revalidate）
@@ -53,6 +68,10 @@
 │   │   ├── Domains.tsx            # 所有供应商的域名列表
 │   │   ├── Records.tsx            # DNS 记录表格 + 创建/编辑表单
 │   │   ├── Providers.tsx          # 供应商管理（添加、测试连通性、删除）
+│   │   ├── Servers.tsx            # 服务器 IP 表（添加、编辑、删除、已绑定主机名）
+│   │   ├── IpUsage.tsx            # IP 使用情况（逐域名扫描、按 IP 分组、行内命名/重命名）
+│   │   ├── McpAccess.tsx          # MCP Token 管理 + 可复制的客户端配置
+│   │   ├── Changes.tsx            # 变更记录 + 恢复
 │   │   ├── Login.tsx              # 登录页
 │   │   └── Setup.tsx              # 初始管理员设置
 │   ├── huawei_line.json           # 华为云解析线路数据（静态文件，约 300 条）
