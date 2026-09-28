@@ -27,4 +27,5 @@ export const KEYS = {
   admin: "dotnify:admin",
   session: (token: string) => `dotnify:session:${token}`,
   providers: "dotnify:providers",
+  servers: "dotnify:servers",
 } as const;

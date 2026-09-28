@@ -29,6 +29,17 @@ export interface Provider {
   selectedZones: string[];
 }
 
+/** Entry in the named server IP table (e.g. "服务器A" → 203.0.113.10). */
+export interface ServerEntry {
+  id: string;
+  name: string; // unique (case-insensitive)
+  ip: string; // IPv4 or IPv6
+  ipVersion: 4 | 6;
+  note?: string;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
 export interface Zone {
   id: string;
   name: string;
