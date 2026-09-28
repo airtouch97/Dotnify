@@ -32,6 +32,7 @@ export interface McpTokenView {
   prefix: string;
   createdAt: string;
   lastUsedAt: string | null;
+  lastUsedIp: string | null;
 }
 
 export function hashToken(token: string): string {
@@ -47,16 +48,33 @@ async function saveTokens(list: McpTokenRecord[]): Promise<void> {
   await redis.set(KEYS.mcpTokens, JSON.stringify(list));
 }
 
-function parseLastUsed(raw: unknown): string | null {
-  if (raw == null) return null;
-  return typeof raw === "string" ? raw : String(raw);
+/** Last-used value: `{ at, ip }` JSON (legacy: a bare ISO timestamp string). */
+function parseLastUsed(raw: unknown): { at: string | null; ip: string | null } {
+  if (raw == null) return { at: null, ip: null };
+  let v: unknown = raw;
+  if (typeof raw === "string") {
+    if (!raw.trim().startsWith("{")) return { at: raw, ip: null };
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return { at: null, ip: null };
+    }
+  }
+  if (v && typeof v === "object") {
+    const o = v as { at?: unknown; ip?: unknown };
+    return { at: typeof o.at === "string" ? o.at : null, ip: typeof o.ip === "string" ? o.ip : null };
+  }
+  return { at: String(v), ip: null };
 }
 
 export async function listTokens(): Promise<McpTokenView[]> {
   const list = await loadTokens();
-  const lastUsed = await Promise.all(list.map((t) => redis.get<string>(KEYS.mcpTokenLastUsed(t.id))));
+  const lastUsed = await Promise.all(list.map((t) => redis.get<unknown>(KEYS.mcpTokenLastUsed(t.id))));
   return list
-    .map((t, i) => ({ id: t.id, name: t.name, prefix: t.prefix, createdAt: t.createdAt, lastUsedAt: parseLastUsed(lastUsed[i]) }))
+    .map((t, i) => {
+      const lu = parseLastUsed(lastUsed[i]);
+      return { id: t.id, name: t.name, prefix: t.prefix, createdAt: t.createdAt, lastUsedAt: lu.at, lastUsedIp: lu.ip };
+    })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -78,7 +96,7 @@ export async function createToken(nameInput: unknown): Promise<{ token: string; 
   };
   list.push(record);
   await saveTokens(list);
-  return { token, record: { id: record.id, name, prefix: record.prefix, createdAt: record.createdAt, lastUsedAt: null } };
+  return { token, record: { id: record.id, name, prefix: record.prefix, createdAt: record.createdAt, lastUsedAt: null, lastUsedIp: null } };
 }
 
 export async function revokeToken(id: string): Promise<void> {
@@ -100,7 +118,7 @@ function safeEqualHex(a: string, b: string): boolean {
  * Verify a presented bearer token against the stored hashes. Returns the
  * matching record (and records last-used time) or null.
  */
-export async function verifyAppToken(token: string): Promise<McpTokenRecord | null> {
+export async function verifyAppToken(token: string, ip?: string): Promise<McpTokenRecord | null> {
   if (!token.startsWith(TOKEN_PREFIX)) return null;
   const hash = hashToken(token);
   const list = await loadTokens();
@@ -111,10 +129,11 @@ export async function verifyAppToken(token: string): Promise<McpTokenRecord | nu
   if (found) {
     const key = KEYS.mcpTokenLastUsed(found.id);
     try {
-      const prev = await redis.get<string>(key);
-      const prevMs = prev ? Date.parse(String(prev)) : 0;
-      if (!prevMs || Date.now() - prevMs > LAST_USED_WRITE_INTERVAL_MS) {
-        await redis.set(key, new Date().toISOString());
+      const prev = parseLastUsed(await redis.get<unknown>(key));
+      const prevMs = prev.at ? Date.parse(prev.at) : 0;
+      const ipChanged = (ip ?? null) !== prev.ip;
+      if (!prevMs || ipChanged || Date.now() - prevMs > LAST_USED_WRITE_INTERVAL_MS) {
+        await redis.set(key, JSON.stringify({ at: new Date().toISOString(), ip: ip ?? null }));
       }
     } catch (e) {
       console.warn("[mcp] failed to record token last-used:", e);

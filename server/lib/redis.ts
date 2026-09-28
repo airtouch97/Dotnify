@@ -30,4 +30,6 @@ export const KEYS = {
   servers: "dotnify:servers",
   mcpTokens: "dotnify:mcp_tokens",
   mcpTokenLastUsed: (id: string) => `dotnify:mcp_token_used:${id}`,
+  dnsChanges: "dotnify:dns_changes",
+  dnsChange: (id: string) => `dotnify:dns_change:${id}`,
 } as const;

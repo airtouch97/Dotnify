@@ -23,6 +23,7 @@
 - **密码保护** — 单管理员账户，密码使用 scrypt 哈希存储
 - **服务器 IP 表与 IP 使用情况** — 为服务器 IP 命名，查看哪些主机名解析到它，并找出所有域名中最常用的 IP（[文档](docs/servers-and-ip-usage.md)，英文）
 - **MCP 端点** — 让 AI 助手通过 Model Context Protocol 管理服务器并绑定到域名，每个客户端单独 Token（[文档](docs/mcp.md)，英文）
+- **变更记录与恢复** — 每次 DNS 变更（网页、API、导入、MCP）在执行前先备份前后快照，可在变更记录页查看并一键恢复（[文档](docs/dns-change-log.md)，英文）
 - **轻量快速** — Vite + React 前端，Hono 后端，Upstash Redis 存储
 
 ## 项目结构
@@ -42,6 +43,8 @@
 │   │   ├── dns.ts                 # 与供应商无关的域名/记录辅助函数（从 routes/zones.ts 抽出）
 │   │   ├── mcp.ts                 # MCP 服务与工具定义
 │   │   ├── mcp-tokens.ts          # MCP Token（仅存哈希、校验、最近使用）
+│   │   ├── changelog.ts           # DNS 变更记录（先备份再修改）
+│   │   ├── restore.ts             # 恢复某次变更（冲突检测）
 │   │   ├── middleware.ts          # 鉴权中间件（Hono createMiddleware）
 │   │   ├── redis.ts               # Upstash Redis 客户端 + 键名定义
 │   │   ├── response.ts            # JSON 响应辅助（ok、error、notFound 等）
@@ -54,6 +57,7 @@
 │       ├── zones.ts               # /api/zones/*（列表、线路、记录 CRUD、address-records）
 │       ├── mcp.ts                 # /api/mcp（MCP Streamable HTTP 端点，Token 鉴权）
 │       ├── mcp-tokens.ts          # /api/mcp-tokens（生成、列表、吊销）
+│       ├── changes.ts             # /api/changes（列表、恢复）
 │       └── servers.ts             # /api/servers/*（服务器表 CRUD、已绑定主机名）
 ├── src/                           # 前端（React + Vite）
 │   ├── components/                # 可复用 UI 组件
@@ -67,6 +71,7 @@
 │   │   ├── Servers.tsx            # 服务器 IP 表（添加、编辑、删除、已绑定主机名）
 │   │   ├── IpUsage.tsx            # IP 使用情况（逐域名扫描、按 IP 分组、行内命名/重命名）
 │   │   ├── McpAccess.tsx          # MCP Token 管理 + 可复制的客户端配置
+│   │   ├── Changes.tsx            # 变更记录 + 恢复
 │   │   ├── Login.tsx              # 登录页
 │   │   └── Setup.tsx              # 初始管理员设置
 │   ├── huawei_line.json           # 华为云解析线路数据（静态文件，约 300 条）

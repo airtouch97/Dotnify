@@ -35,6 +35,7 @@ import {
 import type { AliyunRecord } from "./aliyun.js";
 import type { ImportRecord } from "./import.js";
 import type { Provider, Zone, DnsRecord } from "./types.js";
+import { withChangeLog, snapshot, type DnsChange } from "./changelog.js";
 
 export interface CfZone {
   id: string;
@@ -177,8 +178,8 @@ export async function fetchAllCfRecords(apiKey: string, zoneId: string): Promise
   return all;
 }
 
-/** Create a single DNS record (reuses provider dispatch logic). */
-export async function createNewRecord(
+/** Create a single DNS record (reuses provider dispatch logic). No logging — use createNewRecord. */
+async function rawCreateRecord(
   provider: Provider,
   zoneId: string,
   zoneName: string,
@@ -194,6 +195,7 @@ export async function createNewRecord(
     };
     if (rec.proxied !== undefined) payload.proxied = rec.proxied;
     if (rec.priority !== undefined) payload.priority = rec.priority;
+    if (rec.comment) payload.comment = rec.comment;
 
     const result = await cfFetch<CfRecord>(provider.apiKey, `/zones/${zoneId}/dns_records`, {
       method: "POST",
@@ -254,14 +256,14 @@ export async function createNewRecord(
   }
 }
 
-/** Update an existing DNS record. */
-export async function updateExistingRecord(
+/** Update an existing DNS record. No logging — use updateExistingRecord. Returns the updated record when the provider returns it. */
+async function rawUpdateRecord(
   provider: Provider,
   zoneId: string,
   zoneName: string,
   recordId: string,
   rec: ImportRecord,
-): Promise<void> {
+): Promise<DnsRecord | null> {
   if (provider.type === "cloudflare") {
     const isProxied = rec.proxied === true;
     const payload: Record<string, unknown> = {
@@ -276,11 +278,13 @@ export async function updateExistingRecord(
     }
     if (rec.proxied !== undefined) payload.proxied = rec.proxied;
     if (rec.priority !== undefined) payload.priority = rec.priority;
+    if (rec.comment !== undefined) payload.comment = rec.comment;
 
-    await cfFetch<CfRecord>(provider.apiKey, `/zones/${zoneId}/dns_records/${recordId}`, {
+    const result = await cfFetch<CfRecord>(provider.apiKey, `/zones/${zoneId}/dns_records/${recordId}`, {
       method: "PATCH",
       body: payload,
     });
+    return result && typeof result === "object" && "id" in result ? normalizeCf(result) : null;
   } else if (provider.type === "huawei") {
     const ak = provider.apiAccessKey ?? "";
     const sk = provider.apiSecretKey ?? "";
@@ -344,6 +348,7 @@ export async function updateExistingRecord(
   } else {
     throw new Error(`Unsupported provider type: ${provider.type}`);
   }
+  return null;
 }
 
 /** Load all configured providers from Redis. */
@@ -442,8 +447,8 @@ export async function listZoneRecords(provider: Provider, zoneId: string, zoneNa
   throw new Error(`Unsupported provider type: ${provider.type}`);
 }
 
-/** Delete a single record (record set for Huawei Cloud). */
-export async function deleteRecordById(
+/** Delete a single record (record set for Huawei Cloud). No logging — use deleteRecordById. */
+async function rawDeleteRecord(
   provider: Provider,
   zoneId: string,
   zoneName: string,
@@ -460,4 +465,90 @@ export async function deleteRecordById(
   } else {
     throw new Error(`Unsupported provider type: ${provider.type}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Logged mutations. EVERY DNS write in the app goes through these three (or
+// through withChangeLog directly, see routes/zones.ts): the change log entry
+// with the BEFORE snapshot is written first, and the write is aborted if that
+// backup cannot be stored.
+// ---------------------------------------------------------------------------
+
+export interface MutationOptions {
+  /** Current record, when the caller already has it (saves a provider round-trip). */
+  before?: DnsRecord | null;
+  /** Id of the change being reverted (restore). */
+  restoreOf?: string;
+  /** Receives the change-log entry once the mutation succeeded. */
+  onChange?: (change: DnsChange) => void;
+}
+
+/** Read one record for the backup snapshot. Throws if it can't be read. */
+export async function fetchRecordSnapshot(provider: Provider, zoneId: string, zoneName: string, recordId: string): Promise<DnsRecord | null> {
+  let records: DnsRecord[];
+  try {
+    records = await listZoneRecords(provider, zoneId, zoneName);
+  } catch (e) {
+    throw new Error(`Could not read the current record for backup (${e instanceof Error ? e.message : String(e)}); change not applied`);
+  }
+  return records.find((r) => r.id === recordId) ?? null;
+}
+
+function requestedFields(rec: Partial<ImportRecord>): Partial<DnsRecord> {
+  const out: Partial<DnsRecord> = {};
+  for (const k of ["type", "name", "content", "ttl", "proxied", "priority", "line", "weight", "comment"] as const) {
+    if (rec[k] !== undefined) (out as Record<string, unknown>)[k] = rec[k];
+  }
+  return out;
+}
+
+export async function createNewRecord(
+  provider: Provider,
+  zoneId: string,
+  zoneName: string,
+  rec: ImportRecord,
+  opts: MutationOptions = {},
+): Promise<DnsRecord> {
+  const { result, change } = await withChangeLog(
+    { provider, zoneId, zoneName, action: "create", before: null, requested: requestedFields(rec), restoreOf: opts.restoreOf },
+    () => rawCreateRecord(provider, zoneId, zoneName, rec),
+  );
+  opts.onChange?.(change);
+  return result;
+}
+
+export async function updateExistingRecord(
+  provider: Provider,
+  zoneId: string,
+  zoneName: string,
+  recordId: string,
+  rec: ImportRecord,
+  opts: MutationOptions = {},
+): Promise<DnsRecord | null> {
+  const before = opts.before !== undefined ? opts.before : await fetchRecordSnapshot(provider, zoneId, zoneName, recordId);
+  if (!before) throw new Error("Record not found");
+  const { result, change } = await withChangeLog(
+    { provider, zoneId, zoneName, action: "update", recordId, before, requested: requestedFields(rec), restoreOf: opts.restoreOf },
+    () => rawUpdateRecord(provider, zoneId, zoneName, recordId, rec),
+    // Providers that don't echo the record: after = before + requested fields.
+    (r) => snapshot(r ?? ({ ...before, ...requestedFields(rec), id: recordId } as DnsRecord)),
+  );
+  opts.onChange?.(change);
+  return result;
+}
+
+export async function deleteRecordById(
+  provider: Provider,
+  zoneId: string,
+  zoneName: string,
+  recordId: string,
+  opts: MutationOptions = {},
+): Promise<void> {
+  const before = opts.before !== undefined ? opts.before : await fetchRecordSnapshot(provider, zoneId, zoneName, recordId);
+  if (!before) throw new Error("Record not found");
+  const { change } = await withChangeLog(
+    { provider, zoneId, zoneName, action: "delete", recordId, before, restoreOf: opts.restoreOf },
+    () => rawDeleteRecord(provider, zoneId, zoneName, recordId),
+  );
+  opts.onChange?.(change);
 }

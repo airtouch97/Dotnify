@@ -346,7 +346,7 @@ export async function bindServer(opts: BindOptions) {
   }
   await ensureServer();
   try {
-    await updateExistingRecord(target.provider, target.zone.id, target.zone.name, existing.id, planned);
+    await updateExistingRecord(target.provider, target.zone.id, target.zone.name, existing.id, planned, { before: existing });
   } catch (e) {
     throw new BindingError(`Failed to update record: ${e instanceof Error ? e.message : String(e)}${plan.create ? ` (server "${server.name}" was already added to the server table)` : ""}`, 502);
   }
@@ -395,14 +395,14 @@ export async function unbindServer(opts: UnbindOptions) {
     if (!opts.dryRun) {
       try {
         if (action === "deleted") {
-          await deleteRecordById(target.provider, target.zone.id, target.zone.name, r.id);
+          await deleteRecordById(target.provider, target.zone.id, target.zone.name, r.id, { before: r });
         } else {
           await updateExistingRecord(target.provider, target.zone.id, target.zone.name, r.id, {
             type: r.type,
             name: target.provider.type === "cloudflare" ? target.hostname : target.host,
             content: remaining.join(", "),
             ttl: r.ttl,
-          });
+          }, { before: r });
         }
       } catch (e) {
         throw new BindingError(

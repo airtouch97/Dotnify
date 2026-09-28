@@ -98,13 +98,6 @@ export interface ServerBindings {
   }[];
 }
 
-/** Result of GET /api/zones/:zoneId/address-records. */
-export interface AddressRecordsResponse {
-  zoneName: string;
-  records: { id: string; type: "A" | "AAAA"; hostname: string; ip: string; ttl: number; vercel: boolean }[];
-  vercelCnames: number;
-}
-
 /** MCP access token as listed by GET /api/mcp-tokens (never includes the secret). */
 export interface McpToken {
   id: string;
@@ -112,9 +105,50 @@ export interface McpToken {
   prefix: string;
   createdAt: string;
   lastUsedAt: string | null;
+  lastUsedIp?: string | null;
 }
 
 export interface McpTokensResponse {
   tokens: McpToken[];
   envTokenConfigured: boolean;
+}
+
+/** Result of GET /api/zones/:zoneId/address-records. */
+export interface AddressRecordsResponse {
+  zoneName: string;
+  records: { id: string; type: "A" | "AAAA"; hostname: string; ip: string; ttl: number; vercel: boolean }[];
+  vercelCnames: number;
+}
+
+/** One entry of the DNS change log (GET /api/changes). */
+export interface DnsChange {
+  id: string;
+  ts: string;
+  finishedAt?: string;
+  domain: string;
+  zoneId: string;
+  providerId: string;
+  providerName: string;
+  providerType: string;
+  action: "create" | "update" | "delete";
+  recordId: string | null;
+  before: DnsRecord | null;
+  after: DnsRecord | null;
+  requested?: Partial<DnsRecord>;
+  source: "web" | "mcp" | "system";
+  actor: string;
+  tokenId?: string;
+  ip?: string;
+  operation?: string;
+  status: "pending" | "ok" | "error";
+  error?: string;
+  restoreOf?: string;
+  restoredBy?: string;
+}
+
+export interface DnsChangesResponse {
+  changes: DnsChange[];
+  nextCursor: number | null;
+  total: number;
+  cap: number;
 }

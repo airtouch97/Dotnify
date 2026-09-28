@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { listServers, createServer, updateServer, deleteServer, ServerTableError } from "./servers.js";
+import { withOperation } from "./changelog.js";
 import { bindServer, unbindServer, findBindings, resolveDomain, toRecordView, BindingError } from "./binding.js";
 import { listAllZones, listZoneRecords } from "./dns.js";
 
@@ -265,7 +266,7 @@ export function buildMcpServer(): McpServer {
         record_id?: string;
         dry_run?: boolean;
       }) =>
-        bindServer({
+        withOperation("mcp:bind_server_to_domain", () => bindServer({
           server: args.server,
           ip: args.ip,
           serverName: args.server_name,
@@ -276,7 +277,7 @@ export function buildMcpServer(): McpServer {
           proxied: args.proxied,
           recordId: args.record_id,
           dryRun: args.dry_run,
-        }),
+        })),
     ),
   );
 
@@ -296,7 +297,7 @@ export function buildMcpServer(): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
     safe(async (args: { server: string; domain: string; hostname: string; record_id?: string; dry_run?: boolean }) =>
-      unbindServer({ server: args.server, domain: args.domain, hostname: args.hostname, recordId: args.record_id, dryRun: args.dry_run }),
+      withOperation("mcp:unbind_server_from_domain", () => unbindServer({ server: args.server, domain: args.domain, hostname: args.hostname, recordId: args.record_id, dryRun: args.dry_run })),
     ),
   );
 

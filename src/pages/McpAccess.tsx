@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
@@ -124,6 +125,14 @@ export function McpAccess() {
         </Card>
       )}
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+        <p className="font-semibold">{t("mcp.leakTitle")}</p>
+        <p className="mt-0.5">
+          {t("mcp.leakDesc")}{" "}
+          <Link to="/changes" className="font-medium underline">{t("mcp.openChanges")}</Link>
+        </p>
+      </div>
+
       <Card title={t("mcp.tokensTitle")}>
         {loading ? (
           <Spinner label={t("mcp.loading")} />
@@ -185,7 +194,10 @@ function TokenRow({ token, onRevoked }: { token: McpToken; onRevoked: () => void
         <div className="mt-0.5 flex flex-wrap gap-x-6 text-xs text-slate-500 dark:text-slate-400">
           <span>{t("mcp.created")}: {new Date(token.createdAt).toLocaleString()}</span>
           <span>{t("mcp.lastUsed")}: {token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString() : t("mcp.never")}</span>
+          {token.lastUsedIp && <span>{t("mcp.lastUsedIp")}: <span className="font-mono">{token.lastUsedIp}</span></span>}
+          <Link to={`/changes?token=${encodeURIComponent(token.id)}`} className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("mcp.viewChanges")}</Link>
         </div>
+        {confirming && <p className="mt-1 text-xs text-red-600">{t("mcp.revokeHint")}</p>}
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-2">

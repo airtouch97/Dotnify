@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { getSession, extractBearerToken, refreshSessionTTL } from "./auth.js";
 import { unauthorized } from "./response.js";
 import type { AuthedVariables } from "./types.js";
+import { runWithChangeContext, clientIp } from "./changelog.js";
 
 /**
  * Hono middleware that validates the Bearer token against Redis and
@@ -22,5 +23,9 @@ export const requireAuth = createMiddleware<{ Variables: AuthedVariables }>(asyn
 
   c.set("session", session);
   c.set("token", token);
-  await next();
+  // Every DNS change made during this request is attributed to the web user.
+  await runWithChangeContext(
+    { source: "web", actor: session.username, ip: clientIp((n) => c.req.header(n)) },
+    () => next(),
+  );
 });

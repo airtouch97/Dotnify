@@ -11,6 +11,7 @@ import { Zones } from "@/pages/Zones";
 import { Records } from "@/pages/Records";
 import { Servers } from "@/pages/Servers";
 import { McpAccess } from "@/pages/McpAccess";
+import { Changes } from "@/pages/Changes";
 import { IpUsage } from "@/pages/IpUsage";
 import { Spinner } from "@/components/Spinner";
 
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
       { path: "servers", element: <AuthGuard><Servers /></AuthGuard>, handle: { titleKey: "title.servers" } },
       { path: "ips", element: <AuthGuard><IpUsage /></AuthGuard>, handle: { titleKey: "title.ips" } },
       { path: "mcp", element: <AuthGuard><McpAccess /></AuthGuard>, handle: { titleKey: "title.mcp" } },
+      { path: "changes", element: <AuthGuard><Changes /></AuthGuard>, handle: { titleKey: "title.changes" } },
       { path: "domains/:zoneId/records", element: <AuthGuard><Records /></AuthGuard>, handle: { titleKey: "" } },
       // Legacy redirect
       { path: "zones", element: <Navigate to="/domains" replace /> },

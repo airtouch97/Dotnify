@@ -4,23 +4,17 @@ import { ok, error, notFound } from "../lib/response.js";
 import { cfFetch } from "../lib/cloudflare.js";
 import {
   listRecordSets,
-  createRecordSet as hwCreateRecordSet,
   updateRecordSet as hwUpdateRecordSet,
-  deleteRecordSet as hwDeleteRecordSet,
 } from "../lib/huawei.js";
 import { getLines } from "../lib/huawei-line.js";
 import {
   listRecords as dpListRecords,
-  createRecord as dpCreateRecord,
   updateRecord as dpUpdateRecord,
-  deleteRecord as dpDeleteRecord,
   listLines as dpListLines,
 } from "../lib/dnspod.js";
 import {
   listRecords as aliyunListRecords,
-  createRecord as aliyunCreateRecord,
   updateRecord as aliyunUpdateRecord,
-  deleteRecord as aliyunDeleteRecord,
   listLines as aliyunListLines,
 } from "../lib/aliyun.js";
 import type { DnsRecord } from "../lib/types.js";
@@ -41,7 +35,12 @@ import {
   createNewRecord,
   updateExistingRecord,
   listZoneRecords,
+  deleteRecordById,
+  fetchRecordSnapshot,
 } from "../lib/dns.js";
+import { withChangeLog, withOperation, ChangeLogError } from "../lib/changelog.js";
+
+class RecordNotFound extends Error {}
 import { isVercelCname, isVercelIp } from "../lib/vercel.js";
 
 type Variables = AuthedVariables;
@@ -221,83 +220,22 @@ zones.post("/:zoneId/records", async (c) => {
   }
 
   try {
-    if (provider.type === "cloudflare") {
-      // Cloudflare requires TTL=1 (auto) for proxied records
-      const isProxied = body.proxied === true;
-      const payload: Record<string, unknown> = {
-        type: body.type,
-        name: body.name,
-        content: body.content,
-        ttl: isProxied ? 1 : (body.ttl ?? 1),
-      };
-      if (body.proxied !== undefined) payload.proxied = body.proxied;
-      if (body.priority !== undefined) payload.priority = body.priority;
-
-      const result = await cfFetch<CfRecord>(
-        provider.apiKey,
-        `/zones/${zoneId}/dns_records`,
-        { method: "POST", body: payload }
-      );
-      return ok(c, normalizeCf(result), 201);
-    }
-
-    if (provider.type === "huawei") {
-      const records = body.content.includes(", ")
-        ? body.content.split(", ")
-        : [body.content];
-      const rs = await hwCreateRecordSet(
-        provider.apiAccessKey ?? "",
-        provider.apiSecretKey ?? "",
-        provider.region,
-        zoneId,
-        zoneName,
-        {
-          name: body.name,
-          type: body.type,
-          ttl: body.ttl ?? 300,
-          records,
-          line: body.line,
-        }
-      );
-      return ok(c, normalizeHw(rs, zoneName), 201);
-    }
-
-    if (provider.type === "dnspod") {
-      const ak = provider.apiAccessKey ?? "";
-      const sk = provider.apiSecretKey ?? "";
-      const lineName = await resolveDpLineName(ak, sk, zoneName, body.line);
-      const dpTtl = Math.max(Number(body.ttl) || 600, 600);
-      const r = await dpCreateRecord(ak, sk, zoneName, {
-        name: body.name,
-        type: body.type,
-        content: body.content,
+    // Logged: the change-log backup entry is written before the provider call.
+    const created = await withOperation("web:create_record", () =>
+      createNewRecord(provider, zoneId, zoneName, {
+        type: body.type!,
+        name: body.name!,
+        content: body.content!,
+        ttl: body.ttl as number,
+        proxied: body.proxied,
+        priority: body.priority,
         line: body.line,
-        lineName,
-        ttl: dpTtl,
-        mx: body.priority,
         weight: body.weight,
-      });
-      return ok(c, normalizeDp(r), 201);
-    }
-
-    if (provider.type === "aliyun") {
-      const ak = provider.apiAccessKey ?? "";
-      const sk = provider.apiSecretKey ?? "";
-      const aliyunTtl = Math.max(Number(body.ttl) || 600, 600);
-      const r = await aliyunCreateRecord(ak, sk, zoneName, {
-        name: body.name,
-        type: body.type,
-        content: body.content,
-        line: body.line,
-        ttl: aliyunTtl,
-        mx: body.priority,
-        weight: body.weight,
-      });
-      return ok(c, normalizeAliyun(r), 201);
-    }
-
-    return error(c, `Unsupported provider type: ${provider.type}`, 400);
-  } catch {
+      }),
+    );
+    return ok(c, created, 201);
+  } catch (e) {
+    if (e instanceof ChangeLogError) return error(c, e.message, 503);
     return error(c, "Failed to create record", 502);
   }
 });
@@ -316,117 +254,138 @@ zones.patch("/:zoneId/records/:recordId", async (c) => {
 
   const body = await c.req.json<Partial<DnsRecord>>();
 
+  const allowed = ["type", "name", "content", "ttl", "proxied", "priority", "line", "weight"] as const;
+  if (!allowed.some((k) => body[k] !== undefined)) return error(c, "No fields to update");
+
+  // Backup snapshot of the current record (aborts if it can't be read).
+  let before: DnsRecord | null;
   try {
-    if (provider.type === "cloudflare") {
-      const isProxied = body.proxied === true;
-      const payload: Record<string, unknown> = {};
-      if (body.type !== undefined) payload.type = body.type;
-      if (body.name !== undefined) payload.name = body.name;
-      if (body.content !== undefined) payload.content = body.content;
-      // Cloudflare requires TTL=1 (auto) for proxied records
-      if (isProxied) {
-        payload.ttl = 1;
-      } else if (body.ttl !== undefined) {
-        payload.ttl = body.ttl;
-      }
-      if (body.proxied !== undefined) payload.proxied = body.proxied;
-      if (body.priority !== undefined) payload.priority = body.priority;
-
-      if (Object.keys(payload).length === 0) {
-        return error(c, "No fields to update");
-      }
-
-      const result = await cfFetch<CfRecord>(
-        provider.apiKey,
-        `/zones/${zoneId}/dns_records/${recordId}`,
-        { method: "PATCH", body: payload }
-      );
-      return ok(c, normalizeCf(result));
-    }
-
-    if (provider.type === "huawei") {
-      const ak = provider.apiAccessKey ?? "";
-      const sk = provider.apiSecretKey ?? "";
-      const reg = provider.region;
-
-      const existingSets = await listRecordSets(ak, sk, reg, zoneId);
-      const existing = existingSets.find((rs) => rs.id === recordId);
-      if (!existing) return notFound(c, "Record not found");
-
-      const records = body.content !== undefined
-        ? (body.content.includes(", ") ? body.content.split(", ") : [body.content])
-        : existing.records;
-
-      const rs = await hwUpdateRecordSet(ak, sk, reg, zoneId, recordId, zoneName, {
-        name: body.name ?? existing.name,
-        type: body.type ?? existing.type,
-        ttl: body.ttl ?? existing.ttl,
-        records,
-        line: body.line ?? existing.line,
-      });
-      return ok(c, normalizeHw(rs, zoneName));
-    }
-
-    if (provider.type === "dnspod") {
-      const ak = provider.apiAccessKey ?? "";
-      const sk = provider.apiSecretKey ?? "";
-
-      // DNSPod ModifyRecord requires all fields, so fetch existing first
-      const existingRecords = await dpListRecords(ak, sk, zoneName);
-      const existing = existingRecords.find((r) => r.id === recordId);
-      if (!existing) return notFound(c, "Record not found");
-
-      const resolvedLine = body.line ?? existing.line;
-      const lineName = await resolveDpLineName(ak, sk, zoneName, resolvedLine);
-      const dpTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
-
-      await dpUpdateRecord(ak, sk, zoneName, recordId, {
-        name: body.name ?? existing.name,
-        type: body.type ?? existing.type,
-        content: body.content ?? existing.content,
-        line: resolvedLine,
-        lineName,
-        ttl: dpTtl,
-        mx: body.priority ?? existing.mx,
-        weight: body.weight ?? existing.weight,
-      });
-
-      // Re-fetch the updated record
-      const updatedRecords = await dpListRecords(ak, sk, zoneName);
-      const updated = updatedRecords.find((r) => r.id === recordId);
-      if (!updated) return notFound(c, "Record not found after update");
-      return ok(c, normalizeDp(updated));
-    }
-
-    if (provider.type === "aliyun") {
-      const ak = provider.apiAccessKey ?? "";
-      const sk = provider.apiSecretKey ?? "";
-
-      // Aliyun UpdateDomainRecord requires all fields, so fetch existing first
-      const existingRecords = await aliyunListRecords(ak, sk, zoneName);
-      const existing = existingRecords.find((r) => r.id === recordId);
-      if (!existing) return notFound(c, "Record not found");
-
-      const aliyunTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
-      await aliyunUpdateRecord(ak, sk, recordId, {
-        name: body.name ?? existing.name,
-        type: body.type ?? existing.type,
-        content: body.content ?? existing.content,
-        line: body.line ?? existing.line,
-        ttl: aliyunTtl,
-        mx: body.priority ?? existing.mx,
-        weight: body.weight ?? existing.weight,
-      });
-
-      // Re-fetch the updated record
-      const updatedRecords = await aliyunListRecords(ak, sk, zoneName);
-      const updated = updatedRecords.find((r) => r.id === recordId);
-      if (!updated) return notFound(c, "Record not found after update");
-      return ok(c, normalizeAliyun(updated));
-    }
-
-    return error(c, `Unsupported provider type: ${provider.type}`, 400);
+    before = await fetchRecordSnapshot(provider, zoneId, zoneName, recordId);
   } catch {
+    return error(c, "Could not read the current record for backup; change not applied", 502);
+  }
+  if (!before) return notFound(c, "Record not found");
+
+  const requested: Partial<DnsRecord> = {};
+  for (const k of allowed) if (body[k] !== undefined) (requested as Record<string, unknown>)[k] = body[k];
+
+  const doUpdate = async (): Promise<DnsRecord> => {
+      if (provider.type === "cloudflare") {
+        const isProxied = body.proxied === true;
+        const payload: Record<string, unknown> = {};
+        if (body.type !== undefined) payload.type = body.type;
+        if (body.name !== undefined) payload.name = body.name;
+        if (body.content !== undefined) payload.content = body.content;
+        // Cloudflare requires TTL=1 (auto) for proxied records
+        if (isProxied) {
+          payload.ttl = 1;
+        } else if (body.ttl !== undefined) {
+          payload.ttl = body.ttl;
+        }
+        if (body.proxied !== undefined) payload.proxied = body.proxied;
+        if (body.priority !== undefined) payload.priority = body.priority;
+
+
+        const result = await cfFetch<CfRecord>(
+          provider.apiKey,
+          `/zones/${zoneId}/dns_records/${recordId}`,
+          { method: "PATCH", body: payload }
+        );
+        return normalizeCf(result);
+      }
+
+      if (provider.type === "huawei") {
+        const ak = provider.apiAccessKey ?? "";
+        const sk = provider.apiSecretKey ?? "";
+        const reg = provider.region;
+
+        const existingSets = await listRecordSets(ak, sk, reg, zoneId);
+        const existing = existingSets.find((rs) => rs.id === recordId);
+        if (!existing) throw new RecordNotFound();
+
+        const records = body.content !== undefined
+          ? (body.content.includes(", ") ? body.content.split(", ") : [body.content])
+          : existing.records;
+
+        const rs = await hwUpdateRecordSet(ak, sk, reg, zoneId, recordId, zoneName, {
+          name: body.name ?? existing.name,
+          type: body.type ?? existing.type,
+          ttl: body.ttl ?? existing.ttl,
+          records,
+          line: body.line ?? existing.line,
+        });
+        return normalizeHw(rs, zoneName);
+      }
+
+      if (provider.type === "dnspod") {
+        const ak = provider.apiAccessKey ?? "";
+        const sk = provider.apiSecretKey ?? "";
+
+        // DNSPod ModifyRecord requires all fields, so fetch existing first
+        const existingRecords = await dpListRecords(ak, sk, zoneName);
+        const existing = existingRecords.find((r) => r.id === recordId);
+        if (!existing) throw new RecordNotFound();
+
+        const resolvedLine = body.line ?? existing.line;
+        const lineName = await resolveDpLineName(ak, sk, zoneName, resolvedLine);
+        const dpTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
+
+        await dpUpdateRecord(ak, sk, zoneName, recordId, {
+          name: body.name ?? existing.name,
+          type: body.type ?? existing.type,
+          content: body.content ?? existing.content,
+          line: resolvedLine,
+          lineName,
+          ttl: dpTtl,
+          mx: body.priority ?? existing.mx,
+          weight: body.weight ?? existing.weight,
+        });
+
+        // Re-fetch the updated record
+        const updatedRecords = await dpListRecords(ak, sk, zoneName);
+        const updated = updatedRecords.find((r) => r.id === recordId);
+        if (!updated) throw new Error("Record not found after update");
+        return normalizeDp(updated);
+      }
+
+      if (provider.type === "aliyun") {
+        const ak = provider.apiAccessKey ?? "";
+        const sk = provider.apiSecretKey ?? "";
+
+        // Aliyun UpdateDomainRecord requires all fields, so fetch existing first
+        const existingRecords = await aliyunListRecords(ak, sk, zoneName);
+        const existing = existingRecords.find((r) => r.id === recordId);
+        if (!existing) throw new RecordNotFound();
+
+        const aliyunTtl = Math.max(Number(body.ttl ?? existing.ttl) || 600, 600);
+        await aliyunUpdateRecord(ak, sk, recordId, {
+          name: body.name ?? existing.name,
+          type: body.type ?? existing.type,
+          content: body.content ?? existing.content,
+          line: body.line ?? existing.line,
+          ttl: aliyunTtl,
+          mx: body.priority ?? existing.mx,
+          weight: body.weight ?? existing.weight,
+        });
+
+        // Re-fetch the updated record
+        const updatedRecords = await aliyunListRecords(ak, sk, zoneName);
+        const updated = updatedRecords.find((r) => r.id === recordId);
+        if (!updated) throw new Error("Record not found after update");
+        return normalizeAliyun(updated);
+      }
+
+    throw new Error(`Unsupported provider type: ${provider.type}`);
+  };
+
+  try {
+    const { result } = await withOperation("web:update_record", () =>
+      withChangeLog({ provider, zoneId, zoneName, action: "update", recordId, before, requested }, doUpdate),
+    );
+    return ok(c, result);
+  } catch (e) {
+    if (e instanceof ChangeLogError) return error(c, e.message, 503);
+    if (e instanceof RecordNotFound) return notFound(c, "Record not found");
     return error(c, "Failed to update record", 502);
   }
 });
@@ -442,48 +401,19 @@ zones.delete("/:zoneId/records/:recordId", async (c) => {
   if (!provider) return notFound(c, "Provider not found");
   if (!zoneId || !recordId) return error(c, "zoneId and recordId are required");
 
+  let before: DnsRecord | null;
   try {
-    if (provider.type === "cloudflare") {
-      await cfFetch<{ id: string }>(
-        provider.apiKey,
-        `/zones/${zoneId}/dns_records/${recordId}`,
-        { method: "DELETE" }
-      );
-      return ok(c, { deleted: true });
-    }
-
-    if (provider.type === "huawei") {
-      await hwDeleteRecordSet(
-        provider.apiAccessKey ?? "",
-        provider.apiSecretKey ?? "",
-        provider.region,
-        zoneId,
-        recordId
-      );
-      return ok(c, { deleted: true });
-    }
-
-    if (provider.type === "dnspod") {
-      await dpDeleteRecord(
-        provider.apiAccessKey ?? "",
-        provider.apiSecretKey ?? "",
-        zoneName,
-        recordId
-      );
-      return ok(c, { deleted: true });
-    }
-
-    if (provider.type === "aliyun") {
-      await aliyunDeleteRecord(
-        provider.apiAccessKey ?? "",
-        provider.apiSecretKey ?? "",
-        recordId
-      );
-      return ok(c, { deleted: true });
-    }
-
-    return error(c, `Unsupported provider type: ${provider.type}`, 400);
+    before = await fetchRecordSnapshot(provider, zoneId, zoneName, recordId);
   } catch {
+    return error(c, "Could not read the current record for backup; change not applied", 502);
+  }
+  if (!before) return notFound(c, "Record not found");
+
+  try {
+    await withOperation("web:delete_record", () => deleteRecordById(provider, zoneId, zoneName, recordId, { before }));
+    return ok(c, { deleted: true });
+  } catch (e) {
+    if (e instanceof ChangeLogError) return error(c, e.message, 503);
     return error(c, "Failed to delete record", 502);
   }
 });
@@ -637,6 +567,7 @@ zones.post("/:zoneId/import", async (c) => {
   let updated = 0;
   const importErrors: string[] = [...result.errors];
 
+  await withOperation("web:import", async () => {
   for (const rec of result.records) {
     const nameTypeKey = `${rec.name}:${rec.type}`;
     const fullKey = `${rec.name}:${rec.type}:${rec.content}`;
@@ -658,7 +589,7 @@ zones.post("/:zoneId/import", async (c) => {
         : existing.find((r) => normalizeRecordName(r.name, zoneName) === rec.name && r.type === rec.type && r.content === rec.content);
       if (match) {
         try {
-          await updateExistingRecord(provider, zoneId, zoneName, match.id, rec);
+          await updateExistingRecord(provider, zoneId, zoneName, match.id, rec, { before: match });
           updated++;
         } catch (e) {
           const detail = e instanceof Error ? e.message : "";
@@ -677,6 +608,7 @@ zones.post("/:zoneId/import", async (c) => {
       importErrors.push(`Failed to create ${rec.name} (${rec.type}): ${detail}`);
     }
   }
+  });
 
   return ok(c, { created, skipped, updated, errors: importErrors });
 });

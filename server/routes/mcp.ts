@@ -5,6 +5,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { extractBearerToken } from "../lib/auth.js";
 import { buildMcpServer } from "../lib/mcp.js";
 import { verifyAppToken } from "../lib/mcp-tokens.js";
+import { runWithChangeContext, clientIp, type ChangeContext } from "../lib/changelog.js";
 
 /**
  * MCP endpoint (Streamable HTTP, stateless, JSON responses).
@@ -47,22 +48,25 @@ mcp.use(
 mcp.use("/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
   const token = extractBearerToken(c.req.header("authorization"));
-  let authorized = false;
+  const ip = clientIp((n) => c.req.header(n));
+  let ctx: ChangeContext | null = null;
   if (token) {
     // 1) Tokens generated on the MCP Access page (hash stored in Redis)
-    if (await verifyAppToken(token)) authorized = true;
+    const rec = await verifyAppToken(token, ip);
+    if (rec) ctx = { source: "mcp", actor: `MCP token "${rec.name}" (${rec.prefix}…)`, tokenId: rec.id, ip };
     // 2) Optional fallback: MCP_TOKEN environment variable
     const envToken = process.env.MCP_TOKEN?.trim();
-    if (!authorized && envToken && tokenMatches(token, envToken)) authorized = true;
+    if (!ctx && envToken && tokenMatches(token, envToken)) ctx = { source: "mcp", actor: "MCP_TOKEN (env)", tokenId: "env", ip };
   }
-  if (!authorized) {
+  if (!ctx) {
     c.header("WWW-Authenticate", 'Bearer realm="dotnify-mcp"');
     return c.json(
       jsonRpcError(-32001, "Unauthorized: missing or invalid bearer token. Create one on the MCP Access page (/mcp) of Dotnify."),
       401,
     );
   }
-  await next();
+  // DNS changes made by MCP tools in this request are attributed to this token.
+  await runWithChangeContext(ctx, () => next());
 });
 
 mcp.post("/", async (c) => {

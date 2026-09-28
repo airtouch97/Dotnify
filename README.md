@@ -23,6 +23,7 @@ English | [简体中文](./README.zh-CN.md)
 - **Password-protected** — Single admin account with scrypt-hashed credentials
 - **Server IP table & IP usage** — Name your server IPs, see which hostnames point to them, and find the most-used IPs across all domains ([docs](docs/servers-and-ip-usage.md))
 - **MCP endpoint** — Let AI assistants manage servers and bind them to hostnames via the Model Context Protocol, with per-client tokens ([docs](docs/mcp.md))
+- **Change history & restore** — Every DNS change (web, API, import, MCP) is backed up with before/after snapshots before it is applied; review and restore from the Change history page ([docs](docs/dns-change-log.md))
 - **Fast and lightweight** — Vite + React frontend, Hono backend, Upstash Redis for storage
 
 ## Project Structure
@@ -42,6 +43,8 @@ English | [简体中文](./README.zh-CN.md)
 │   │   ├── dns.ts                 # Provider-agnostic zone/record helpers (moved from routes/zones.ts)
 │   │   ├── mcp.ts                 # MCP server + tool definitions
 │   │   ├── mcp-tokens.ts          # MCP tokens (hash-only storage, verify, last used)
+│   │   ├── changelog.ts           # DNS change log (backup before write)
+│   │   ├── restore.ts             # Restore a logged change (conflict check)
 │   │   ├── middleware.ts          # Auth middleware (Hono createMiddleware)
 │   │   ├── redis.ts               # Upstash Redis client + key definitions
 │   │   ├── response.ts            # JSON response helpers (ok, error, notFound, etc.)
@@ -54,6 +57,7 @@ English | [简体中文](./README.zh-CN.md)
 │       ├── zones.ts               # /api/zones/* (list, lines, records CRUD, address-records)
 │       ├── mcp.ts                 # /api/mcp (MCP Streamable HTTP endpoint, token auth)
 │       ├── mcp-tokens.ts          # /api/mcp-tokens (generate, list, revoke)
+│       ├── changes.ts             # /api/changes (list, restore)
 │       └── servers.ts             # /api/servers/* (server IP table CRUD, bindings)
 ├── src/                           # Frontend (React + Vite)
 │   ├── components/                # Reusable UI components
@@ -67,6 +71,7 @@ English | [简体中文](./README.zh-CN.md)
 │   │   ├── Servers.tsx            # Server IP table (add, edit, delete, bound hostnames)
 │   │   ├── IpUsage.tsx            # IP usage (per-domain scan, group by IP, name/rename inline)
 │   │   ├── McpAccess.tsx          # MCP tokens + ready-to-copy client configs
+│   │   ├── Changes.tsx            # Change history + restore
 │   │   ├── Login.tsx              # Login page
 │   │   └── Setup.tsx              # Initial admin setup
 │   ├── huawei_line.json           # Huawei Cloud resolution line data (static, ~300 entries)

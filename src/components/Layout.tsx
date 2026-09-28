@@ -25,6 +25,7 @@ export function Layout() {
     { to: "/ips", label: t("nav.ips") },
     { to: "/providers", label: t("nav.providers") },
     { to: "/mcp", label: t("nav.mcp") },
+    { to: "/changes", label: t("nav.changes") },
   ];
 
   async function handleLogout() {
