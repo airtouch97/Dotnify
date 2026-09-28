@@ -54,6 +54,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
+    // Keep the browser chrome / status bar in step with the in-app theme.
+    const color = resolved === "dark" ? "#111113" : "#f5f5f7";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", color));
   }, [resolved]);
 
   const setTheme = useCallback((next: Theme) => {

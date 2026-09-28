@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
@@ -14,7 +14,10 @@ import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Toggle } from "@/components/Toggle";
 import { Select } from "@/components/Select";
-import { SkeletonRow } from "@/components/Skeleton";
+import { SkeletonRow, SkeletonList } from "@/components/Skeleton";
+import { PageHeader, UpdatingPill } from "@/components/PageHeader";
+import { Icon } from "@/components/Icon";
+import { ErrorNote } from "@/components/ErrorNote";
 import { EmptyState } from "@/components/EmptyState";
 import hwLineData from "@/huawei_line.json";
 import dpLineData from "@/dnspod_line.json";
@@ -266,7 +269,7 @@ export function Records() {
 
   if (!zoneId || !providerId) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div>
         <EmptyState
           title={t("records.missingParams")}
           description={t("records.missingParamsDesc")}
@@ -276,49 +279,40 @@ export function Records() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            to="/domains"
-            className="text-sm text-brand-600 hover:underline"
-          >
-            {t("records.backToDomains")}
-          </Link>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
-            {t("records.dnsRecords")}
-          </h1>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+    <div className="space-y-6">
+      <PageHeader
+        back={{ to: "/domains", label: t("records.backToDomains").replace(/^[←\s]+/, "") }}
+        title={t("records.dnsRecords")}
+        subtitle={
+          <>
             {t("records.zone")}{" "}
-            <span className="font-mono text-slate-700 dark:text-slate-300">
-              {zoneName || zoneId}
-            </span>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isValidating && !loading && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
-              {t("records.updating")}
-            </span>
-          )}
-          <Button variant="ghost" onClick={() => setShowExport(true)}>
-            {t("records.export")}
-          </Button>
-          <Button variant="ghost" onClick={() => setShowImport(true)}>
-            {t("records.import")}
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setCreating((v) => !v);
-            }}
-            variant={creating ? "secondary" : "primary"}
-          >
-            {creating ? t("records.cancel") : t("records.addRecord")}
-          </Button>
-        </div>
-      </div>
+            <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{zoneName || zoneId}</span>
+          </>
+        }
+        status={isValidating && !loading ? <UpdatingPill label={t("records.updating")} /> : null}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setShowExport(true)}>
+              <Icon name="download" size={16} />
+              {t("records.export")}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
+              <Icon name="upload" size={16} />
+              {t("records.import")}
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setCreating((v) => !v);
+              }}
+              variant={creating ? "secondary" : "primary"}
+            >
+              {!creating && <Icon name="plus" size={16} />}
+              {creating ? t("records.cancel") : t("records.addRecord")}
+            </Button>
+          </>
+        }
+      />
 
       {creating && (
         <RecordForm
@@ -367,34 +361,36 @@ export function Records() {
       )}
 
       {loading ? (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
+        <>
+        <div className="md:hidden"><SkeletonList rows={5} /></div>
+        <Card className="hidden overflow-hidden p-0 md:block">
+          <div className="scroll-x">
             <table className="w-full table-fixed text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                  <th className="px-4 py-2 font-medium w-[7%]">
+                <tr className="border-b border-black/[0.06] bg-slate-50/80 text-left text-[11px] uppercase tracking-[0.05em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+                  <th className="px-4 py-3 font-semibold w-[7%]">
                     {t("records.type")}
                   </th>
-                  <th className="px-4 py-2 font-medium w-[20%]">
+                  <th className="px-4 py-3 font-semibold w-[20%]">
                     {t("records.name")}
                   </th>
-                  <th className="px-4 py-2 font-medium">
+                  <th className="px-4 py-3 font-semibold">
                     {t("records.content")}
                   </th>
-                  <th className="px-4 py-2 font-medium w-[9%]">
+                  <th className="px-4 py-3 font-semibold w-[9%]">
                     {t("records.ttl")}
                   </th>
                   {showLine && (
-                    <th className="px-4 py-2 font-medium w-[16%]">
+                    <th className="px-4 py-3 font-semibold w-[16%]">
                       {t("records.line")}
                     </th>
                   )}
                   {showProxied && (
-                    <th className="px-4 py-2 font-medium w-[9%]">
+                    <th className="px-4 py-3 font-semibold w-[9%]">
                       {t("records.proxied")}
                     </th>
                   )}
-                  <th className="px-4 py-2 text-right font-medium w-[11%]">
+                  <th className="px-4 py-3 text-right font-semibold w-[11%]">
                     {t("records.actions")}
                   </th>
                 </tr>
@@ -410,51 +406,85 @@ export function Records() {
             </table>
           </div>
         </Card>
+        </>
       ) : error ? (
         <Card>
-          <p className="text-sm text-red-600">{error}</p>
-          <Button
-            variant="secondary"
-            className="mt-3"
-            onClick={() => void refetch()}
-          >
-            {t("records.retry")}
-          </Button>
+          <ErrorNote message={error} onRetry={() => void refetch()} retryLabel={t("records.retry")} />
         </Card>
       ) : !records || records.length === 0 ? (
         <EmptyState
+          icon={<Icon name="globe" size={26} />}
           title={t("records.noRecords")}
           description={t("records.noRecordsDesc")}
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
+        <>
+        {/* Phones: records as a grouped card list */}
+        <ul className="surface overflow-hidden md:hidden">
+          {records.map((r) => (
+            <li key={r.id} className="border-b border-black/[0.05] last:border-b-0 dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => setEditing(r)}
+                className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors duration-120 active:bg-slate-100 dark:active:bg-white/[0.06]"
+                aria-label={`${t("records.edit")} ${r.type} ${r.name}`}
+              >
+                <span className="mt-0.5 inline-flex h-6 min-w-[3.25rem] shrink-0 items-center justify-center rounded-md bg-brand-100 px-1.5 font-mono text-[11px] font-semibold text-brand-800 dark:bg-brand-400/15 dark:text-brand-200">
+                  {r.type}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-sm font-medium text-slate-900 dark:text-slate-100">{r.name}</span>
+                  <span className="mt-0.5 block break-all font-mono text-[13px] leading-snug text-slate-600 dark:text-slate-300">
+                    {r.content}
+                    {r.priority !== undefined && r.priority !== null && (
+                      <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">(pri {r.priority})</span>
+                    )}
+                  </span>
+                  <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span>
+                      {t("records.ttl")} {showProxied ? formatCfTtl(r.ttl, t("records.auto")) : r.ttl}
+                    </span>
+                    {showLine && <span>{displayLineName(r.line)}</span>}
+                    {showProxied && (
+                      <span>
+                        {t("records.proxied")}: {r.proxied ? t("records.yes") : t("records.no")}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <Icon name="chevron-right" size={16} className="mt-1 text-slate-300 dark:text-slate-600" />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <Card className="hidden overflow-hidden p-0 md:block">
+          <div className="scroll-x">
             <table className="w-full table-fixed text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                  <th className="px-4 py-2 font-medium w-[7%]">
+                <tr className="border-b border-black/[0.06] bg-slate-50/80 text-left text-[11px] uppercase tracking-[0.05em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+                  <th className="px-4 py-3 font-semibold w-[7%]">
                     {t("records.type")}
                   </th>
-                  <th className="px-4 py-2 font-medium w-[20%]">
+                  <th className="px-4 py-3 font-semibold w-[20%]">
                     {t("records.name")}
                   </th>
-                  <th className="px-4 py-2 font-medium">
+                  <th className="px-4 py-3 font-semibold">
                     {t("records.content")}
                   </th>
-                  <th className="px-4 py-2 font-medium w-[9%]">
+                  <th className="px-4 py-3 font-semibold w-[9%]">
                     {t("records.ttl")}
                   </th>
                   {showLine && (
-                    <th className="px-4 py-2 font-medium w-[16%]">
+                    <th className="px-4 py-3 font-semibold w-[16%]">
                       {t("records.line")}
                     </th>
                   )}
                   {showProxied && (
-                    <th className="px-4 py-2 font-medium w-[9%]">
+                    <th className="px-4 py-3 font-semibold w-[9%]">
                       {t("records.proxied")}
                     </th>
                   )}
-                  <th className="px-4 py-2 text-right font-medium w-[11%]">
+                  <th className="px-4 py-3 text-right font-semibold w-[11%]">
                     {t("records.actions")}
                   </th>
                 </tr>
@@ -463,10 +493,10 @@ export function Records() {
                 {records.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-b border-slate-100 last:border-b-0 align-top dark:border-slate-700"
+                    className="border-b border-black/[0.05] align-middle transition-colors duration-120 last:border-b-0 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.03]"
                   >
-                    <td className="px-4 py-2">
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                    <td className="px-4 py-3">
+                      <span className="inline-flex h-6 items-center rounded-md bg-brand-100 px-1.5 font-mono text-[11px] font-semibold text-brand-800 dark:bg-brand-400/15 dark:text-brand-200">
                         {r.type}
                       </span>
                     </td>
@@ -482,31 +512,32 @@ export function Records() {
                     >
                       {r.content}
                       {r.priority !== undefined && r.priority !== null && (
-                        <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">
+                        <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">
                           (pri {r.priority})
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {showProxied
                         ? formatCfTtl(r.ttl, t("records.auto"))
                         : r.ttl}
                     </td>
                     {showLine && (
-                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {displayLineName(r.line)}
                       </td>
                     )}
                     {showProxied && (
-                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {r.proxied ? t("records.yes") : t("records.no")}
                       </td>
                     )}
-                    <td className="px-4 py-2 text-right align-middle">
+                    <td className="px-4 py-3 text-right align-middle">
                       <div className="flex justify-end">
                         <Button
                           variant="secondary"
-                          className="px-2 py-[0.2rem] text-xs leading-none"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs"
                           onClick={() => setEditing(r)}
                         >
                           {t("records.edit")}
@@ -519,6 +550,7 @@ export function Records() {
             </table>
           </div>
         </Card>
+        </>
       )}
     </div>
   );
@@ -735,7 +767,7 @@ function RecordForm({
           disabled={isEdit}
         />
         {isEdit && (
-          <p className="self-end text-xs text-slate-400 dark:text-slate-500">
+          <p className="self-end text-xs text-slate-500 dark:text-slate-400">
             {t("records.typeReadOnly")}
           </p>
         )}
@@ -801,7 +833,7 @@ function RecordForm({
         )}
         {showLine && providerType === "dnspod" && (
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
               {t("records.line")}
             </label>
             <DnsLineSelector
@@ -818,7 +850,7 @@ function RecordForm({
         )}
         {showLine && providerType === "aliyun" && (
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
               {t("records.line")}
             </label>
             <DnsLineSelector
@@ -835,7 +867,7 @@ function RecordForm({
         )}
         {showLine && providerType === "huawei" && (
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
               {t("records.line")}
             </label>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -945,8 +977,8 @@ function RecordForm({
             />
           </div>
         )}
-        {error && <p className="text-xs text-red-600 md:col-span-2">{error}</p>}
-        <div className="flex items-center justify-between gap-2 md:col-span-2">
+        {error && <p className="text-xs text-red-600 dark:text-red-400 md:col-span-2">{error}</p>}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between md:col-span-2">
           <div>
             {isEdit && record && (
               <DeleteButton
@@ -959,7 +991,7 @@ function RecordForm({
               />
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button type="button" variant="secondary" onClick={handleCancel}>
               {t("records.cancel")}
             </Button>
@@ -1138,10 +1170,10 @@ function ExportModal({
           {FORMATS.map((f) => (
             <label
               key={f.value}
-              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-xl p-3.5 ring-1 ring-inset transition-[box-shadow,background-color] duration-160 ${
                 format === f.value
-                  ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/20"
-                  : "border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500"
+                  ? "bg-brand-50 ring-2 ring-brand-500 dark:bg-brand-400/10 dark:ring-brand-400"
+                  : "bg-white ring-black/[0.08] hover:ring-black/20 dark:bg-white/[0.04] dark:ring-white/10 dark:hover:ring-white/20"
               }`}
             >
               <input
@@ -1150,7 +1182,7 @@ function ExportModal({
                 value={f.value}
                 checked={format === f.value}
                 onChange={() => setFormat(f.value)}
-                className="mt-0.5 accent-brand-600"
+                className="mt-0.5"
               />
               <div>
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -1163,8 +1195,8 @@ function ExportModal({
             </label>
           ))}
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onClose}>
             {t("records.cancel")}
           </Button>
@@ -1360,10 +1392,10 @@ function ImportModal({
           </p>
           {result.errors.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-red-600">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400">
                 {t("records.importErrors")}:
               </p>
-              <ul className="mt-1 list-inside list-disc text-xs text-red-500">
+              <ul className="mt-1 list-inside list-disc text-xs text-red-500 dark:text-red-400">
                 {result.errors.slice(0, 10).map((e, i) => (
                   <li key={i}>{e}</li>
                 ))}
@@ -1402,7 +1434,7 @@ function ImportModal({
 
         {/* File upload / paste area */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+          <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
             {t("records.pasteOrUpload")}
           </label>
           <input
@@ -1415,7 +1447,7 @@ function ImportModal({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-brand-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+            className="pressable inline-flex items-center justify-center gap-2 rounded-xl border border-dashed border-brand-300 bg-brand-50/50 px-4 py-3 text-sm font-medium text-brand-800 hover:border-brand-500 hover:bg-brand-50 dark:border-brand-400/40 dark:bg-brand-400/5 dark:text-brand-200 dark:hover:border-brand-400 dark:hover:bg-brand-400/10"
           >
             <svg
               className="h-4 w-4"
@@ -1436,7 +1468,7 @@ function ImportModal({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={8}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
+            className="w-full rounded-xl bg-white px-3.5 py-3 font-mono text-xs text-slate-900 shadow-xs ring-1 ring-inset ring-black/[0.1] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-white/[0.06] dark:text-slate-100 dark:ring-white/10 dark:placeholder:text-slate-500"
             placeholder={
               format === "json"
                 ? '[{ "type": "A", "name": "www", "content": "1.2.3.4", "ttl": 300 }]'
@@ -1449,7 +1481,7 @@ function ImportModal({
 
         {/* Parse errors */}
         {parseErrors.length > 0 && (
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
+          <div className="rounded-xl bg-amber-50 p-3.5 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/20">
             <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
               {t("records.parseErrors", { count: parseErrors.length })}
             </p>
@@ -1467,10 +1499,10 @@ function ImportModal({
             <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
               {t("records.importPreviewCount", { count: preview.length })}
             </p>
-            <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="max-h-48 overflow-auto overscroll-contain rounded-xl border border-black/[0.08] dark:border-white/10">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  <tr className="border-b border-black/[0.08] bg-slate-50 text-left text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400">
                     <th className="px-2 py-1">Type</th>
                     <th className="px-2 py-1">Name</th>
                     <th className="px-2 py-1">Content</th>
@@ -1481,7 +1513,7 @@ function ImportModal({
                   {preview.map((r, i) => (
                     <tr
                       key={i}
-                      className="border-b border-slate-100 last:border-b-0 dark:border-slate-700"
+                      className="border-b border-black/[0.05] last:border-b-0 dark:border-white/10"
                     >
                       <td className="px-2 py-1 font-mono">{r.type}</td>
                       <td className="px-2 py-1 font-mono">{r.name}</td>
@@ -1499,7 +1531,7 @@ function ImportModal({
 
         {/* Conflict strategy */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+          <label className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
             {t("records.conflictStrategy")}
           </label>
           {(
@@ -1523,10 +1555,10 @@ function ImportModal({
           ).map((s) => (
             <label
               key={s.value}
-              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-xl p-3.5 ring-1 ring-inset transition-[box-shadow,background-color] duration-160 ${
                 strategy === s.value
-                  ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/20"
-                  : "border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500"
+                  ? "bg-brand-50 ring-2 ring-brand-500 dark:bg-brand-400/10 dark:ring-brand-400"
+                  : "bg-white ring-black/[0.08] hover:ring-black/20 dark:bg-white/[0.04] dark:ring-white/10 dark:hover:ring-white/20"
               }`}
             >
               <input
@@ -1535,7 +1567,7 @@ function ImportModal({
                 value={s.value}
                 checked={strategy === s.value}
                 onChange={() => setStrategy(s.value)}
-                className="mt-0.5 accent-brand-600"
+                className="mt-0.5"
               />
               <div>
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -1549,10 +1581,10 @@ function ImportModal({
           ))}
         </div>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 
         {/* Actions */}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onClose}>
             {t("records.cancel")}
           </Button>
@@ -1645,7 +1677,7 @@ function DeleteButton({
             {t("records.cancel")}
           </Button>
         </span>
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
       </div>
     );
   }

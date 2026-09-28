@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
@@ -7,8 +7,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { serverSaveError } from "@/lib/server-errors";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
-import { Spinner } from "@/components/Spinner";
+import { Input, inputClass } from "@/components/Input";
+import { SkeletonList } from "@/components/Skeleton";
+import { PageHeader } from "@/components/PageHeader";
+import { Badge } from "@/components/Badge";
+import { Icon } from "@/components/Icon";
+import { ErrorNote } from "@/components/ErrorNote";
 import { EmptyState } from "@/components/EmptyState";
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
@@ -28,14 +32,9 @@ export function Servers() {
   const zones = zonesData?.zones ?? [];
   const [showForm, setShowForm] = useState(false);
   const [query, setQuery] = useState("");
-  // /servers?edit=<id> opens that server's edit form (linked from the IP usage page).
+  // Deep link from the IP usage page: /servers?edit=<id> opens that server's edit form.
   const [params, setParams] = useSearchParams();
   const editId = params.get("edit");
-  const clearEdit = () => {
-    const next = new URLSearchParams(params);
-    next.delete("edit");
-    setParams(next, { replace: true });
-  };
 
   const q = query.trim().toLowerCase();
   const filtered = (servers ?? []).filter(
@@ -43,16 +42,17 @@ export function Servers() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t("servers.title")}</h1>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t("servers.subtitle")}</p>
-        </div>
-        <Button onClick={() => setShowForm((v) => !v)} variant={showForm ? "secondary" : "primary"}>
-          {showForm ? t("servers.cancel") : t("servers.addServer")}
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={t("servers.title")}
+        subtitle={t("servers.subtitle")}
+        actions={
+          <Button onClick={() => setShowForm((v) => !v)} variant={showForm ? "secondary" : "primary"}>
+            {!showForm && <Icon name="plus" size={16} />}
+            {showForm ? t("servers.cancel") : t("servers.addServer")}
+          </Button>
+        }
+      />
 
       {showForm && (
         <ServerForm
@@ -63,30 +63,47 @@ export function Servers() {
       )}
 
       {loading ? (
-        <Spinner label={t("servers.loading")} />
+        <div aria-label={t("servers.loading")}>
+          <SkeletonList rows={3} />
+        </div>
       ) : error ? (
         <Card>
-          <p className="text-sm text-red-600">{error}</p>
+          <ErrorNote message={error} onRetry={() => void refetch()} retryLabel={t("common.retry")} />
         </Card>
       ) : !servers || servers.length === 0 ? (
         <EmptyState
+          icon={<Icon name="server" size={26} />}
           title={t("servers.noServers")}
           description={t("servers.noServersDesc")}
-          action={!showForm ? <Button onClick={() => setShowForm(true)}>{t("servers.addFirst")}</Button> : undefined}
+          action={!showForm ? <Button onClick={() => setShowForm(true)}><Icon name="plus" size={16} />{t("servers.addFirst")}</Button> : undefined}
         />
       ) : (
         <>
           {servers.length > 5 && (
-            <Input
-              name="server-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("servers.searchPlaceholder")}
-            />
+            <div className="relative">
+              <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-slate-500" />
+              <Input
+                name="server-search"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("servers.searchPlaceholder")}
+                aria-label={t("servers.searchPlaceholder")}
+                className="pl-9"
+                enterKeyHint="search"
+              />
+            </div>
           )}
-          <ul className="space-y-3">
+          <ul className="stagger space-y-3">
             {filtered.map((s) => (
-              <ServerRow key={s.id} server={s} zones={zones} startEditing={s.id === editId} onEditHandled={clearEdit} onChanged={() => void refetch()} />
+              <ServerRow
+                key={s.id}
+                server={s}
+                zones={zones}
+                onChanged={() => void refetch()}
+                startEditing={s.id === editId}
+                onEditHandled={() => { if (editId) setParams({}, { replace: true }); }}
+              />
             ))}
           </ul>
         </>
@@ -157,6 +174,10 @@ function ServerForm({
             onChange={(e) => setIp(e.target.value)}
             placeholder="203.0.113.10 / 2001:db8::1"
             className="font-mono"
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             required
             hint={t("servers.ipHint")}
           />
@@ -169,8 +190,8 @@ function ServerForm({
           placeholder={t("servers.notePlaceholder")}
           maxLength={500}
         />
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>{t("servers.cancel")}</Button>
           <Button type="submit" loading={busy}>{t("servers.save")}</Button>
         </div>
@@ -193,15 +214,15 @@ function ServerRow({
   onEditHandled?: () => void;
 }) {
   const { t } = useLang();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   const rowRef = useRef<HTMLLIElement>(null);
-
   useEffect(() => {
     if (!startEditing) return;
     setEditing(true);
+    rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
     onEditHandled?.();
-    requestAnimationFrame(() => rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }));
-  }, [startEditing, onEditHandled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEditing]);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,65 +273,90 @@ function ServerRow({
   }
 
   return (
-    <li>
-      <Card>
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{server.name}</h3>
-              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                {server.ipVersion === 6 ? "IPv6 · AAAA" : "IPv4 · A"}
-              </span>
-            </div>
-            <dl className="mt-1 flex flex-wrap gap-x-6 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-              <div>
-                <dt className="inline">{t("servers.ip")}:</dt>{" "}
-                <dd className="inline font-mono text-slate-700 dark:text-slate-300">{server.ip}</dd>
+    <li ref={rowRef}>
+      <Card bodyClassName="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 text-brand-800 dark:from-brand-400/20 dark:to-brand-300/10 dark:text-brand-200">
+              <Icon name="server" size={20} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-white">{server.name}</h3>
+                <Badge tone="accent">{server.ipVersion === 6 ? "IPv6 · AAAA" : "IPv4 · A"}</Badge>
               </div>
-              {server.note && (
-                <div className="min-w-0">
-                  <dt className="inline">{t("servers.note")}:</dt>{" "}
-                  <dd className="inline break-all text-slate-700 dark:text-slate-300">{server.note}</dd>
+              <p className="mt-1 break-all font-mono text-sm text-slate-700 dark:text-slate-200">{server.ip}</p>
+              <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {server.note && (
+                  <div className="min-w-0">
+                    <dt className="sr-only">{t("servers.note")}</dt>
+                    <dd className="break-words">{server.note}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="inline">{t("servers.updated")}:</dt>{" "}
+                  <dd className="inline tabular-nums">{new Date(server.updatedAt).toLocaleDateString()}</dd>
                 </div>
-              )}
-              <div>
-                <dt className="inline">{t("servers.updated")}:</dt>{" "}
-                <dd className="inline">{new Date(server.updatedAt).toLocaleDateString()}</dd>
-              </div>
-            </dl>
-            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+              </dl>
+              {error && <p role="alert" className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button variant="ghost" onClick={() => { setShowBindings((v) => !v); setBindings(null); }} disabled={confirming}>
-              {showBindings ? t("servers.hideBindings") : t("servers.showBindings")}
-            </Button>
-            <Button variant="secondary" onClick={() => setEditing(true)} disabled={confirming} aria-label={t("servers.editAria", { name: server.name })}>
+          <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditing(true)}
+              disabled={confirming}
+              aria-label={t("servers.editAria", { name: server.name })}
+            >
+              <Icon name="edit" size={14} />
               {t("servers.edit")}
             </Button>
-            {confirming ? (
-              <>
-                <Button variant="danger" onClick={remove} loading={busy}>
-                  {t("servers.confirmDelete")}
-                </Button>
-                <Button variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
-                  {t("servers.cancel")}
-                </Button>
-              </>
-            ) : (
-              <Button variant="ghost" onClick={() => setConfirming(true)} disabled={busy} aria-label={t("servers.deleteAria", { name: server.name })} className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30">
+            {!confirming && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirming(true)}
+                disabled={busy}
+                aria-label={t("servers.deleteAria", { name: server.name })}
+                className="!text-red-600 dark:!text-red-400"
+              >
+                <Icon name="trash" size={14} />
                 {t("servers.delete")}
               </Button>
             )}
+            <Button
+              variant={showBindings ? "tinted" : "ghost"}
+              size="sm"
+              onClick={() => { setShowBindings((v) => !v); setBindings(null); }}
+              disabled={confirming}
+              aria-expanded={showBindings}
+            >
+              {showBindings ? t("servers.hideBindings") : t("servers.showBindings")}
+            </Button>
           </div>
         </div>
-        {confirming && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t("servers.deleteHint")}</p>}
+        {confirming && (
+          <div role="alertdialog" aria-label={t("servers.confirmDelete")} className="mt-4 flex animate-pop-in flex-col gap-3 rounded-xl bg-red-50 p-3.5 ring-1 ring-inset ring-red-200 dark:bg-red-500/10 dark:ring-red-500/20 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-red-800 dark:text-red-200">{t("servers.deleteHint")}</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={busy} className="flex-1 sm:flex-none">
+                {t("servers.cancel")}
+              </Button>
+              <Button variant="danger" size="sm" onClick={remove} loading={busy} className="flex-1 sm:flex-none">
+                {t("servers.confirmDelete")}
+              </Button>
+            </div>
+          </div>
+        )}
         {showBindings && (
-          <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-700">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-4 animate-fade-in rounded-xl bg-slate-50 p-3 ring-1 ring-inset ring-black/[0.04] dark:bg-white/[0.03] dark:ring-white/[0.05] sm:p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <select
+                aria-label={t("servers.pickDomain")}
                 value={bindDomain}
                 onChange={(e) => { setBindDomain(e.target.value); setBindings(null); }}
-                className="min-w-[14rem] rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className={`${inputClass} sm:w-72`}
               >
                 <option value="">{t("servers.pickDomain")}</option>
                 {zones.map((z) => (
@@ -319,10 +365,10 @@ function ServerRow({
                   </option>
                 ))}
               </select>
-              <Button variant="secondary" onClick={loadBindings} loading={loadingBindings} disabled={!bindDomain} className="px-3 py-1.5 text-xs">
+              <Button variant="primary" onClick={loadBindings} loading={loadingBindings} disabled={!bindDomain}>
                 {t("servers.checkDomain")}
               </Button>
-              <Link to="/ips" className="ml-auto text-xs text-brand-600 hover:underline dark:text-brand-400">
+              <Link to="/ips" className="inline-flex min-h-[44px] items-center text-sm font-medium text-brand-700 hover:underline dark:text-brand-300 sm:ml-auto sm:min-h-0">
                 {t("servers.ipUsageLink")}
               </Link>
             </div>
@@ -336,10 +382,10 @@ function ServerRow({
                 ) : (
                   <ul className="space-y-1">
                     {bindings.bindings.map((b) => (
-                      <li key={b.recordId + b.content} className="flex items-center gap-3 text-sm">
-                        <span className="w-12 font-mono text-xs text-slate-400">{b.type}</span>
-                        <span className="font-mono text-slate-900 dark:text-slate-100">{b.hostname}</span>
-                        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">TTL {b.ttl}</span>
+                      <li key={b.recordId + b.content} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 text-sm shadow-xs dark:bg-white/[0.05]">
+                        <Badge tone="brand" className="font-mono">{b.type}</Badge>
+                        <span className="min-w-0 flex-1 truncate font-mono text-slate-900 dark:text-slate-100">{b.hostname}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">TTL {b.ttl}</span>
                       </li>
                     ))}
                   </ul>

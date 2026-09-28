@@ -4,28 +4,24 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { useLang } from "@/lib/i18n";
 import type { DnsChange, DnsChangesResponse, DnsRecord, McpTokensResponse, ZoneWithProvider } from "@/lib/types";
-import { Card } from "@/components/Card";
+import { PageHeader, UpdatingPill } from "@/components/PageHeader";
 import { Button } from "@/components/Button";
-import { Spinner } from "@/components/Spinner";
-import { EmptyState } from "@/components/EmptyState";
+import { Badge } from "@/components/Badge";
+import { Icon } from "@/components/Icon";
+import { ErrorNote } from "@/components/ErrorNote";
+import { SkeletonList } from "@/components/Skeleton";
+import { inputClass } from "@/components/Input";
 
 const PAGE = 30;
 const FIELDS = ["type", "name", "content", "ttl", "proxied", "priority", "line", "weight", "comment", "status"] as const;
 type Field = (typeof FIELDS)[number];
-
-const pill = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium";
-const ACTION_CLASS: Record<DnsChange["action"], string> = {
-  create: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  update: "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400",
-  delete: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-};
 
 export function Changes() {
   const { t } = useLang();
   const [params, setParams] = useSearchParams();
   const domain = params.get("domain") ?? "";
   const token = params.get("token") ?? "";
-  const { data: zoneData } = useFetch<{ zones: ZoneWithProvider[] }>("/api/zones", { cacheTtl: 604800 });
+  const { data: zoneData } = useFetch<{ zones: ZoneWithProvider[] }>("/api/zones");
   const { data: tokenData } = useFetch<McpTokensResponse>(token ? "/api/mcp-tokens" : null);
   const [list, setList] = useState<DnsChange[]>([]);
   const [meta, setMeta] = useState<{ nextCursor: number | null; total: number; cap: number } | null>(null);
@@ -87,23 +83,25 @@ export function Changes() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t("changes.title")}</h1>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t("changes.subtitle")}</p>
-        </div>
-        <Button variant="secondary" onClick={() => { setLoading(true); void reload(); }}>
-          {t("changes.refresh")}
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={t("changes.title")}
+        subtitle={t("changes.subtitle")}
+        status={loadingMore ? <UpdatingPill label={t("changes.loadMore")} /> : undefined}
+        actions={
+          <Button variant="secondary" onClick={() => { setLoading(true); void reload(); }} aria-label={t("changes.refresh")}>
+            <Icon name="refresh" size={16} />
+          </Button>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="sr-only" htmlFor="changes-domain">{t("changes.domainFilter")}</label>
         <select
-          aria-label={t("changes.domainFilter")}
+          id="changes-domain"
           value={domain}
           onChange={(e) => setFilter("domain", e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className={`${inputClass} sm:max-w-xs`}
         >
           <option value="">{t("changes.allDomains")}</option>
           {zoneNames.map((n) => (
@@ -111,24 +109,28 @@ export function Changes() {
           ))}
         </select>
         {token && (
-          <span className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-sm text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
-            {t("changes.tokenFilter", { name: tokenName })}
-            <button type="button" onClick={() => setFilter("token", "")} className="text-xs font-medium underline">{t("changes.clearFilter")}</button>
+          <span className="inline-flex min-h-[44px] items-center gap-2 self-start rounded-full bg-brand-50 py-1 pl-3.5 pr-1.5 text-sm text-brand-900 ring-1 ring-inset ring-brand-200/80 dark:bg-brand-400/10 dark:text-brand-100 dark:ring-brand-400/20 sm:self-auto">
+            <Icon name="key" size={15} />
+            <span className="min-w-0 truncate">{t("changes.tokenFilter", { name: tokenName })}</span>
+            <Button variant="ghost" size="sm" onClick={() => setFilter("token", "")}>{t("changes.clearFilter")}</Button>
           </span>
         )}
-        {meta && <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">{t("changes.count", { n: meta.total, cap: meta.cap })}</span>}
+        {meta && (
+          <p className="text-xs text-slate-500 dark:text-slate-400 sm:ml-auto">{t("changes.count", { n: meta.total, cap: meta.cap })}</p>
+        )}
       </div>
 
       {loading ? (
-        <Spinner />
+        <SkeletonList rows={4} />
       ) : error && list.length === 0 ? (
-        <Card>
-          <p className="text-sm text-red-600">{error}</p>
-        </Card>
+        <ErrorNote message={error} onRetry={() => void reload()} retryLabel={t("common.retry")} />
       ) : list.length === 0 ? (
-        <EmptyState title={domain || token ? t("changes.emptyFiltered") : t("changes.empty")} />
+        <div className="surface flex items-center gap-3 px-5 py-6 text-sm text-slate-500 dark:text-slate-400">
+          <Icon name="history" size={20} className="text-brand-500" />
+          {domain || token ? t("changes.emptyFiltered") : t("changes.empty")}
+        </div>
       ) : (
-        <ul className="space-y-3">
+        <ul className="stagger space-y-3">
           {list.map((c) => (
             <ChangeItem key={c.id} change={c} onRestored={() => void reload()} />
           ))}
@@ -170,6 +172,7 @@ function ChangeItem({ change: c, onRestored }: { change: DnsChange; onRestored: 
 
   const rec = c.after ?? c.before;
   const host = hostOf(c);
+  const tone = c.action === "create" ? "success" : c.action === "delete" ? "danger" : "brand";
   const rows = FIELDS.filter((f) => fmt(f, c.before, t) !== null || fmt(f, c.after, t) !== null);
   const restorable = c.status !== "error" || !!c.before;
 
@@ -194,94 +197,105 @@ function ChangeItem({ change: c, onRestored }: { change: DnsChange; onRestored: 
   }
 
   return (
-    <li>
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`${pill} ${ACTION_CLASS[c.action]}`}>{t(`changes.action.${c.action}`)}</span>
-              {rec && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">{rec.type}</span>}
-              <span className="break-all font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{host}</span>
-              {c.status === "error" && <span className={`${pill} bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400`}>{t("changes.status.error")}</span>}
-              {c.status === "pending" && <span className={`${pill} bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400`}>{t("changes.status.pending")}</span>}
-              {c.restoredBy && <span className={`${pill} bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400`}>{t("changes.restored")}</span>}
-              {c.restoreOf && <span className={`${pill} bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300`}>{t("changes.isRestore")}</span>}
-            </div>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-              <time dateTime={c.ts}>{new Date(c.ts).toLocaleString()}</time>
-              <span>{c.domain} · {c.providerName}</span>
-              <span>
-                {t("changes.by")}: <span className="font-medium text-slate-700 dark:text-slate-200">[{t(`changes.source.${c.source}`)}] {c.actor}</span>
-              </span>
-              {c.ip && <span>{t("changes.ip")}: <span className="font-mono">{c.ip}</span></span>}
-              {c.operation && <span className="font-mono">{c.operation}</span>}
-            </div>
+    <li className="surface p-4 sm:p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={tone} dot>{t(`changes.action.${c.action}`)}</Badge>
+            {rec && <Badge tone="neutral">{rec.type}</Badge>}
+            <span className="min-w-0 break-all font-mono text-[15px] font-semibold text-slate-900 dark:text-white">{host}</span>
+            {c.status === "error" && <Badge tone="danger">{t("changes.status.error")}</Badge>}
+            {c.status === "pending" && <Badge tone="warning">{t("changes.status.pending")}</Badge>}
+            {c.restoredBy && <Badge tone="success">{t("changes.restored")}</Badge>}
+            {c.restoreOf && <Badge tone="accent">{t("changes.isRestore")}</Badge>}
           </div>
-          {restorable && mode === "idle" && (
-            <Button variant="secondary" onClick={() => setMode("confirm")} aria-label={t("changes.restoreAria", { name: host })} className="px-3 py-1.5 text-xs">
-              {t("changes.restore")}
-            </Button>
-          )}
-        </div>
-
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse text-xs">
-            <thead>
-              <tr className="text-left text-slate-500 dark:text-slate-400">
-                <th className="w-24 py-1.5 pr-3 font-medium" />
-                <th className="py-1.5 pr-3 font-medium">{t("changes.before")}</th>
-                <th className="py-1.5 font-medium">{t("changes.after")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((f) => {
-                const b = fmt(f, c.before, t);
-                const a = fmt(f, c.after, t);
-                const changed = b !== a;
-                return (
-                  <tr key={f} className="border-t border-slate-100 dark:border-slate-700">
-                    <td className="py-1.5 pr-3 text-slate-500 dark:text-slate-400">{t(`changes.field.${f}`)}</td>
-                    <td className={`break-all py-1.5 pr-3 font-mono ${changed && b !== null ? "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300" : "text-slate-700 dark:text-slate-300"}`}>
-                      {b ?? <span className="text-slate-400">{c.before ? "—" : t("changes.none")}</span>}
-                    </td>
-                    <td className={`break-all py-1.5 font-mono ${changed && a !== null ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "text-slate-700 dark:text-slate-300"}`}>
-                      {a ?? <span className="text-slate-400">{c.after ? "—" : t("changes.none")}</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {c.error && <p className="mt-2 text-xs text-red-600">{t("changes.error")}: {c.error}</p>}
-        {err && <p role="alert" className="mt-2 text-xs text-red-600">{err}</p>}
-
-        {mode === "confirm" && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm text-brand-800 dark:border-brand-900/50 dark:bg-brand-900/20 dark:text-brand-200">
-            <span>{t(`changes.restoreConfirm.${c.action}`)}</span>
-            <span className="flex gap-2">
-              <Button variant="ghost" onClick={() => setMode("idle")} disabled={busy} className="px-3 py-1 text-xs">{t("changes.cancel")}</Button>
-              <Button onClick={() => restore(false)} loading={busy} className="px-3 py-1 text-xs">{t("changes.confirmRestore")}</Button>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <time dateTime={c.ts}>{new Date(c.ts).toLocaleString()}</time>
+            <span>{c.domain} · {c.providerName}</span>
+            <span className="inline-flex items-center gap-1.5">
+              <Badge tone={c.source === "mcp" ? "warning" : "neutral"} className="!h-5 !px-2 !text-[11px]">{t(`changes.source.${c.source}`)}</Badge>
+              <span className="break-all text-slate-700 dark:text-slate-200">{c.actor}</span>
             </span>
+            {c.ip && <span>{t("changes.ip")}: <span className="font-mono">{c.ip}</span></span>}
+            {c.operation && <span className="font-mono text-[11px]">{c.operation}</span>}
           </div>
+        </div>
+        {restorable && mode === "idle" && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setMode("confirm")}
+            aria-label={t("changes.restoreAria", { name: host })}
+            className="self-start md:shrink-0"
+          >
+            <Icon name="history" size={15} />
+            {t("changes.restore")}
+          </Button>
         )}
+      </div>
 
-        {mode === "conflict" && (
-          <div role="alertdialog" aria-label={t("changes.conflictTitle")} className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
-            <p className="font-semibold">{t("changes.conflictTitle")}</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs">
-              {conflicts.map((x, i) => <li key={i}>{x}</li>)}
-            </ul>
-            <div className="mt-2 flex gap-2">
-              <Button variant="ghost" onClick={() => setMode("idle")} disabled={busy} className="px-3 py-1 text-xs">{t("changes.cancel")}</Button>
-              <Button variant="danger" onClick={() => restore(true)} loading={busy} className="px-3 py-1 text-xs">{t("changes.forceRestore")}</Button>
+      {/* Before / after diff */}
+      <div className="mt-3.5 overflow-hidden rounded-xl ring-1 ring-inset ring-black/[0.06] dark:ring-white/[0.07]">
+        <div className="grid grid-cols-[5.5rem_1fr_1fr] bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/[0.03] dark:text-slate-400 sm:grid-cols-[7rem_1fr_1fr]">
+          <span className="px-3 py-2" />
+          <span className="px-3 py-2">{t("changes.before")}</span>
+          <span className="px-3 py-2">{t("changes.after")}</span>
+        </div>
+        {rows.map((f) => {
+          const b = fmt(f, c.before, t);
+          const a = fmt(f, c.after, t);
+          const changed = b !== a;
+          return (
+            <div key={f} className="grid grid-cols-[5.5rem_1fr_1fr] border-t border-black/[0.05] text-[13px] dark:border-white/[0.06] sm:grid-cols-[7rem_1fr_1fr]">
+              <span className="px-3 py-2 text-slate-500 dark:text-slate-400">{t(`changes.field.${f}`)}</span>
+              <span className={`min-w-0 break-all px-3 py-2 font-mono ${changed && b !== null ? "bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-200" : "text-slate-700 dark:text-slate-200"}`}>
+                {b ?? <span className="text-slate-400">{c.before ? "—" : t("changes.none")}</span>}
+              </span>
+              <span className={`min-w-0 break-all px-3 py-2 font-mono ${changed && a !== null ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200" : "text-slate-700 dark:text-slate-200"}`}>
+                {a ?? <span className="text-slate-400">{c.after ? "—" : t("changes.none")}</span>}
+              </span>
             </div>
-          </div>
-        )}
+          );
+        })}
+      </div>
 
-        {mode === "done" && <p role="status" className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">{t("changes.restoreDone")}</p>}
-      </Card>
+      {c.error && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{t("changes.error")}: {c.error}</p>
+      )}
+      {err && <p role="alert" className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{err}</p>}
+
+      {mode === "confirm" && (
+        <div className="mt-3.5 flex animate-pop-in flex-col gap-3 rounded-xl bg-brand-50 p-3.5 ring-1 ring-inset ring-brand-200/80 dark:bg-brand-400/10 dark:ring-brand-400/20 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-brand-900 dark:text-brand-100">{t(`changes.restoreConfirm.${c.action}`)}</p>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setMode("idle")} disabled={busy} className="flex-1 sm:flex-none">{t("changes.cancel")}</Button>
+            <Button size="sm" onClick={() => restore(false)} loading={busy} className="flex-1 sm:flex-none">{t("changes.confirmRestore")}</Button>
+          </div>
+        </div>
+      )}
+
+      {mode === "conflict" && (
+        <div role="alertdialog" aria-label={t("changes.conflictTitle")} className="mt-3.5 animate-pop-in rounded-xl bg-amber-50 p-3.5 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/20">
+          <p className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+            <Icon name="alert" size={16} />
+            {t("changes.conflictTitle")}
+          </p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-6 text-[13px] text-amber-900 dark:text-amber-100">
+            {conflicts.map((x, i) => <li key={i}>{x}</li>)}
+          </ul>
+          <div className="mt-3 flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setMode("idle")} disabled={busy} className="flex-1 sm:flex-none">{t("changes.cancel")}</Button>
+            <Button variant="danger" size="sm" onClick={() => restore(true)} loading={busy} className="flex-1 sm:flex-none">{t("changes.forceRestore")}</Button>
+          </div>
+        </div>
+      )}
+
+      {mode === "done" && (
+        <p role="status" className="mt-3 flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+          <Icon name="check" size={16} />
+          {t("changes.restoreDone")}
+        </p>
+      )}
     </li>
   );
 }

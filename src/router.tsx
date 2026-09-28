@@ -11,8 +11,8 @@ import { Zones } from "@/pages/Zones";
 import { Records } from "@/pages/Records";
 import { Servers } from "@/pages/Servers";
 import { McpAccess } from "@/pages/McpAccess";
-import { Changes } from "@/pages/Changes";
 import { IpUsage } from "@/pages/IpUsage";
+import { Changes } from "@/pages/Changes";
 import { Spinner } from "@/components/Spinner";
 
 /**
@@ -39,7 +39,7 @@ function useMe(): MeResponse | undefined {
 
 function SpinnerShell() {
   return (
-    <div className="grid h-screen place-items-center">
+    <div className="grid min-h-dvh place-items-center">
       <Spinner />
     </div>
   );
