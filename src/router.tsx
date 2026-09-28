@@ -9,6 +9,8 @@ import { Home } from "@/pages/Home";
 import { Providers } from "@/pages/Providers";
 import { Zones } from "@/pages/Zones";
 import { Records } from "@/pages/Records";
+import { Servers } from "@/pages/Servers";
+import { IpUsage } from "@/pages/IpUsage";
 import { Spinner } from "@/components/Spinner";
 
 /**
@@ -92,6 +94,8 @@ export const router = createBrowserRouter([
       { path: "login", element: <LoginGuard />, handle: { titleKey: "title.login" } },
       { path: "providers", element: <AuthGuard><Providers /></AuthGuard>, handle: { titleKey: "title.providers" } },
       { path: "domains", element: <AuthGuard><Zones /></AuthGuard>, handle: { titleKey: "title.domains" } },
+      { path: "servers", element: <AuthGuard><Servers /></AuthGuard>, handle: { titleKey: "title.servers" } },
+      { path: "ips", element: <AuthGuard><IpUsage /></AuthGuard>, handle: { titleKey: "title.ips" } },
       { path: "domains/:zoneId/records", element: <AuthGuard><Records /></AuthGuard>, handle: { titleKey: "" } },
       // Legacy redirect
       { path: "zones", element: <Navigate to="/domains" replace /> },
