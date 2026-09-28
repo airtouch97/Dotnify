@@ -30,6 +30,11 @@ Finds the IPs your A/AAAA records point to most, across all managed domains.
   renamed inline, removed from the table (with confirmation), or opened in
   `/servers` to edit the IP / note. Duplicate names get a clear error.
 
+## MCP
+
+With the MCP endpoint ([docs](mcp.md)), assistants can also add servers and
+bind / unbind them to hostnames (`bind_server_to_domain`, `unbind_server_from_domain`).
+
 ## REST API
 
 All endpoints use the existing admin session auth (`Authorization: Bearer <session>`).

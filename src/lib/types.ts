@@ -104,3 +104,17 @@ export interface AddressRecordsResponse {
   records: { id: string; type: "A" | "AAAA"; hostname: string; ip: string; ttl: number; vercel: boolean }[];
   vercelCnames: number;
 }
+
+/** MCP access token as listed by GET /api/mcp-tokens (never includes the secret). */
+export interface McpToken {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface McpTokensResponse {
+  tokens: McpToken[];
+  envTokenConfigured: boolean;
+}

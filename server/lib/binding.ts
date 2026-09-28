@@ -1,19 +1,22 @@
 /**
- * Server ⇄ hostname lookup logic (which hostnames point at a server), used by the REST API.
+ * Server ⇄ hostname binding logic, used by the MCP tools and the REST API.
  *
  * "Binding" server X to a hostname means making sure the hostname has an
  * A (IPv4) or AAAA (IPv6) record pointing at the server's IP, via whichever
  * DNS provider manages the hostname's zone.
  */
 import {
+  createNewRecord,
+  deleteRecordById,
   listAllZones,
   listZoneRecords,
   loadProviders,
   normalizeRecordName,
+  updateExistingRecord,
   type ZoneWithProvider,
 } from "./dns.js";
-import { findServer, listServers, sameIp } from "./servers.js";
-import type { DnsRecord, Provider, ServerEntry } from "./types.js";
+import { createServer, findServer, findServerByIp, listServers, normalizeIp, sameIp, validateNewServer } from "./servers.js";
+import type { DnsRecord, Provider, RecordType, ServerEntry } from "./types.js";
 
 export class BindingError extends Error {
   status: 400 | 404 | 409 | 502;
@@ -154,6 +157,268 @@ async function requireServer(idOrName: string): Promise<ServerEntry> {
     throw new BindingError(`Server not found: "${idOrName}". Known servers: ${names}`, 404);
   }
   return server;
+}
+
+async function fetchRecords(t: ResolvedTarget): Promise<RecordView[]> {
+  try {
+    const records = await listZoneRecords(t.provider, t.zone.id, t.zone.name);
+    return records.map((r) => toRecordView(r, t.zone.name));
+  } catch (e) {
+    throw new BindingError(`Failed to fetch records for ${t.zone.name}: ${e instanceof Error ? e.message : String(e)}`, 502);
+  }
+}
+
+function summarizeZone(t: ResolvedTarget) {
+  return { domain: t.zone.name, zoneId: t.zone.id, provider: t.provider.name, providerType: t.provider.type };
+}
+
+export interface BindOptions {
+  /** Existing server name/id. Either this or `ip` is required. */
+  server?: string;
+  /** Raw IPv4/IPv6. Uses the matching server, or creates one named `serverName`. */
+  ip?: string;
+  /** Name for a new server entry when `ip` is not yet in the table. */
+  serverName?: string;
+  serverNote?: string;
+  domain: string;
+  hostname: string;
+  ttl?: number;
+  proxied?: boolean;
+  recordId?: string;
+  dryRun?: boolean;
+}
+
+export type BindAction = "created" | "updated" | "unchanged";
+
+/**
+ * Point `hostname` at the server's IP. Creates an A/AAAA record, or updates
+ * the existing A/AAAA record for that host if there is exactly one (or the
+ * one given by recordId). Refuses to touch CNAME conflicts or ambiguous
+ * multi-record hosts.
+ */
+interface BindServerPlan {
+  server: { name: string; ip: string; ipVersion: 4 | 6 };
+  /** "existing": already in the table; "create": will be added (or would be, on dry run). */
+  source: "existing" | "create";
+  note?: string; // informational message for the caller
+  create?: { name: string; ip: string; note?: string };
+}
+
+/**
+ * Work out which server a bind refers to: an existing server (by name/id or
+ * by IP), or a new server entry to create from `ip` + `serverName`.
+ * Never writes anything.
+ */
+async function planBindServer(opts: BindOptions): Promise<BindServerPlan> {
+  const serverRef = opts.server?.trim();
+  const ipInput = opts.ip?.trim();
+
+  if (!serverRef && !ipInput) {
+    throw new BindingError('Provide either "server" (an existing server name/id) or "ip" (with "server_name" if that IP is not in the server table yet).');
+  }
+
+  if (serverRef && !ipInput) {
+    const s = await requireServer(serverRef);
+    return { server: { name: s.name, ip: s.ip, ipVersion: s.ipVersion }, source: "existing" };
+  }
+
+  const parsed = normalizeIp(ipInput!);
+  if (!parsed) throw new BindingError(`Invalid IP address: ${ipInput}`);
+
+  if (serverRef) {
+    // Both given: they must agree.
+    const s = await requireServer(serverRef);
+    if (!sameIp(s.ip, parsed.ip)) {
+      throw new BindingError(
+        `Server "${s.name}" has IP ${s.ip}, not ${parsed.ip}. To bind ${parsed.ip}, pass only "ip" (plus "server_name" if it is new); to change the server's IP use update_server.`,
+        409,
+      );
+    }
+    return { server: { name: s.name, ip: s.ip, ipVersion: s.ipVersion }, source: "existing" };
+  }
+
+  const existing = await findServerByIp(parsed.ip);
+  if (existing) {
+    const wanted = opts.serverName?.trim();
+    const note =
+      wanted && wanted.toLowerCase() !== existing.name.toLowerCase()
+        ? `IP ${existing.ip} is already in the server table as "${existing.name}"; server_name "${wanted}" was ignored (use update_server to rename).`
+        : undefined;
+    return { server: { name: existing.name, ip: existing.ip, ipVersion: existing.ipVersion }, source: "existing", ...(note ? { note } : {}) };
+  }
+
+  const wanted = opts.serverName?.trim();
+  if (!wanted) {
+    const names = (await listServers()).map((s) => s.name).join(", ") || "(none)";
+    throw new BindingError(
+      `IP ${parsed.ip} is not in the server table yet, so it needs a name. Ask the user what to call this server (or propose a name, e.g. based on the hostname) and call bind_server_to_domain again with ip="${parsed.ip}" and server_name="<name>". Existing server names: ${names}.`,
+    );
+  }
+  const v = await validateNewServer({ name: wanted, ip: parsed.ip, note: opts.serverNote });
+  return {
+    server: { name: v.name, ip: v.ip, ipVersion: v.version },
+    source: "create",
+    create: { name: v.name, ip: v.ip, ...(v.note ? { note: v.note } : {}) },
+  };
+}
+
+export async function bindServer(opts: BindOptions) {
+  const plan = await planBindServer(opts);
+  const server = plan.server;
+  const type: RecordType = server.ipVersion === 6 ? "AAAA" : "A";
+  const target = await resolveTarget(opts.domain, opts.hostname);
+  const records = await fetchRecords(target);
+  const sameHost = records.filter((r) => r.host === target.host);
+
+  const base = {
+    server: { name: server.name, ip: server.ip },
+    serverEntry: plan.source === "existing" ? "existing" : opts.dryRun ? "would_create" : "created",
+    ...(plan.note ? { note: plan.note } : {}),
+    hostname: target.hostname,
+    host: target.host,
+    type,
+    ...summarizeZone(target),
+    dryRun: !!opts.dryRun,
+  };
+
+  /** Create the new server entry (real runs only), right before the DNS write. */
+  const ensureServer = async () => {
+    if (plan.create && !opts.dryRun) await createServer(plan.create);
+  };
+  const serverMsg = plan.create ? (opts.dryRun ? ` Would add server "${server.name}" (${server.ip}) to the server table.` : ` Added server "${server.name}" (${server.ip}) to the server table.`) : "";
+
+  const cname = sameHost.find((r) => r.type === "CNAME");
+  if (cname) {
+    throw new BindingError(
+      `${target.hostname} already has a CNAME record (→ ${cname.content}, record id ${cname.id}). A CNAME cannot coexist with an ${type} record; delete the CNAME first if you really want to replace it.`,
+      409,
+    );
+  }
+
+  let matches = sameHost.filter((r) => r.type === type);
+  if (opts.recordId) {
+    matches = matches.filter((r) => r.id === opts.recordId);
+    if (matches.length === 0) throw new BindingError(`No ${type} record with id ${opts.recordId} on ${target.hostname}`, 404);
+  }
+
+  const already = matches.find((r) => recordPointsTo(r, server.ip) && contentValues(r.content).length === 1);
+  if (already) {
+    await ensureServer();
+    return { ...base, action: "unchanged" as BindAction, record: already, message: `${target.hostname} already points to ${server.name} (${server.ip}).${serverMsg}` };
+  }
+
+  const isCf = target.provider.type === "cloudflare";
+  const recordName = isCf ? target.hostname : target.host;
+
+  if (matches.length === 0) {
+    const ttl = opts.ttl ?? (isCf ? 1 : 600);
+    const planned = { type, name: recordName, content: server.ip, ttl, ...(isCf ? { proxied: opts.proxied ?? false } : {}) };
+    if (opts.dryRun) {
+      return { ...base, action: "created" as BindAction, planned, message: `Would create ${type} ${target.hostname} → ${server.ip}.${serverMsg}` };
+    }
+    await ensureServer();
+    try {
+      const created = await createNewRecord(target.provider, target.zone.id, target.zone.name, planned);
+      return { ...base, action: "created" as BindAction, record: toRecordView(created, target.zone.name), message: `Created ${type} ${target.hostname} → ${server.ip}.${serverMsg}` };
+    } catch (e) {
+      throw new BindingError(`Failed to create record: ${e instanceof Error ? e.message : String(e)}${plan.create ? ` (server "${server.name}" was already added to the server table)` : ""}`, 502);
+    }
+  }
+
+  if (matches.length > 1) {
+    throw new BindingError(
+      `${target.hostname} has ${matches.length} ${type} records (${matches.map((r) => `id ${r.id}: ${r.content}${r.line ? ` [line ${r.line}]` : ""}`).join("; ")}). Pass record_id to choose which one to update.`,
+      409,
+    );
+  }
+
+  const existing = matches[0];
+  const planned = {
+    type,
+    name: recordName,
+    content: server.ip,
+    ttl: opts.ttl ?? existing.ttl,
+    ...(isCf && opts.proxied !== undefined ? { proxied: opts.proxied } : {}),
+  };
+  const previous = { id: existing.id, content: existing.content, ttl: existing.ttl };
+  if (opts.dryRun) {
+    return { ...base, action: "updated" as BindAction, previous, planned, message: `Would update ${type} ${target.hostname}: ${existing.content} → ${server.ip}.${serverMsg}` };
+  }
+  await ensureServer();
+  try {
+    await updateExistingRecord(target.provider, target.zone.id, target.zone.name, existing.id, planned);
+  } catch (e) {
+    throw new BindingError(`Failed to update record: ${e instanceof Error ? e.message : String(e)}${plan.create ? ` (server "${server.name}" was already added to the server table)` : ""}`, 502);
+  }
+  return { ...base, action: "updated" as BindAction, previous, recordId: existing.id, message: `Updated ${type} ${target.hostname}: ${existing.content} → ${server.ip}.${serverMsg}` };
+}
+
+export interface UnbindOptions {
+  server: string;
+  domain: string;
+  hostname: string;
+  recordId?: string;
+  dryRun?: boolean;
+}
+
+/**
+ * Remove the A/AAAA record(s) on `hostname` that point to the server's IP.
+ * Records pointing elsewhere are never touched. For multi-value record sets
+ * (Huawei Cloud) only the server's IP is removed from the set.
+ */
+export async function unbindServer(opts: UnbindOptions) {
+  const server = await requireServer(opts.server);
+  const target = await resolveTarget(opts.domain, opts.hostname);
+  const records = await fetchRecords(target);
+  let matches = records.filter((r) => r.host === target.host && recordPointsTo(r, server.ip));
+  if (opts.recordId) matches = matches.filter((r) => r.id === opts.recordId);
+
+  const base = {
+    server: { name: server.name, ip: server.ip },
+    hostname: target.hostname,
+    ...summarizeZone(target),
+    dryRun: !!opts.dryRun,
+  };
+
+  if (matches.length === 0) {
+    const current = records
+      .filter((r) => r.host === target.host)
+      .map((r) => ({ id: r.id, type: r.type, content: r.content }));
+    return { ...base, removed: [], message: `${target.hostname} has no A/AAAA record pointing to ${server.name} (${server.ip}). Nothing changed.`, currentRecords: current };
+  }
+
+  const removed: { id: string; type: string; content: string; action: "deleted" | "value_removed" }[] = [];
+  for (const r of matches) {
+    const values = contentValues(r.content);
+    const remaining = values.filter((v) => !sameIp(v, server.ip));
+    const action = remaining.length > 0 ? "value_removed" : "deleted";
+    if (!opts.dryRun) {
+      try {
+        if (action === "deleted") {
+          await deleteRecordById(target.provider, target.zone.id, target.zone.name, r.id);
+        } else {
+          await updateExistingRecord(target.provider, target.zone.id, target.zone.name, r.id, {
+            type: r.type,
+            name: target.provider.type === "cloudflare" ? target.hostname : target.host,
+            content: remaining.join(", "),
+            ttl: r.ttl,
+          });
+        }
+      } catch (e) {
+        throw new BindingError(
+          `Failed to remove record ${r.id}: ${e instanceof Error ? e.message : String(e)}` +
+            (removed.length ? ` (already removed: ${removed.map((x) => x.id).join(", ")})` : ""),
+          502,
+        );
+      }
+    }
+    removed.push({ id: r.id, type: r.type, content: r.content, action });
+  }
+  return {
+    ...base,
+    removed,
+    message: `${opts.dryRun ? "Would remove" : "Removed"} ${removed.length} record(s) on ${target.hostname} pointing to ${server.name} (${server.ip}).`,
+  };
 }
 
 /**

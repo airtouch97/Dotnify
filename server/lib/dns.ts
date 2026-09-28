@@ -1,6 +1,6 @@
 /**
  * Provider-agnostic DNS helpers shared by the REST routes (server/routes/zones.ts)
- * and the server-binding helpers (server/lib/binding.ts).
+ * the server-binding helpers (server/lib/binding.ts) and the MCP endpoint (server/routes/mcp.ts).
  *
  * Every function here dispatches on `provider.type` to the matching provider
  * client (Cloudflare / Huawei Cloud / Tencent Cloud DNSPod / Alibaba Cloud) and

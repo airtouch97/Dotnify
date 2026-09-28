@@ -87,3 +87,12 @@ export interface CloudflareResponse<T> {
   errors: { code: number; message: string }[];
   messages: { code: number; message: string }[];
 }
+
+/** App-generated MCP access token. Only the SHA-256 hash is stored. */
+export interface McpTokenRecord {
+  id: string;
+  name: string;
+  hash: string; // sha256(token) hex
+  prefix: string; // first chars of the token, for display only
+  createdAt: string; // ISO timestamp
+}
